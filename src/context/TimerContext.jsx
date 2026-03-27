@@ -98,21 +98,21 @@ export const TimerProvider = ({ children }) => {
 
   // 다중 탭 감지 (Rule 03)
   useEffect(() => {
-    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) {
-      console.warn('BroadcastChannel is not available in this environment. 다중 탭 동기화 기능이 비활성화됩니다.');
-      return;
-    }
+    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
 
     const channel = new BroadcastChannel('sentinel_sync');
     channelRef.current = channel;
-    try {
-      channel.postMessage({ type: 'NEW_TAB', id: tabId });
-    } catch (err) {
-      console.warn('BroadcastChannel postMessage 실패:', err);
-    }
+
+    // 새 탭이 열렸음을 알림
+    channel.postMessage({ type: 'NEW_SESSION_START', id: tabId });
 
     const handleMessage = (e) => {
-      if (e.data?.type === 'NEW_TAB' && e.data.id !== tabId) {
+      if (e.data?.type === 'NEW_SESSION_START' && e.data.id !== tabId) {
+        // 다른 탭이 열리면 현재 탭 중단
+        setIsActive(false);
+      }
+      if (e.data?.type === 'FORCE_RESUME' && e.data.id !== tabId) {
+        // 다른 탭에서 '계속하기'를 누르면 현재 탭 중단
         setIsActive(false);
       }
     };
@@ -120,22 +120,15 @@ export const TimerProvider = ({ children }) => {
     channel.onmessage = handleMessage;
 
     return () => {
-      try {
-        channel.close();
-      } catch (err) {
-        console.warn('BroadcastChannel close 실패:', err);
-      }
+      channel.close();
       if (channelRef.current === channel) channelRef.current = null;
     };
   }, [tabId]);
 
   const resumeHere = () => {
     setIsActive(true);
-    try {
-      channelRef.current?.postMessage({ type: 'NEW_TAB', id: tabId });
-    } catch (err) {
-      console.warn('resumeHere postMessage 실패:', err);
-    }
+    // 현재 탭이 주도권을 가짐을 다른 탭에 알림
+    channelRef.current?.postMessage({ type: 'FORCE_RESUME', id: tabId });
   };
 
   return (
