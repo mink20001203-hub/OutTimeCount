@@ -56,7 +56,7 @@ const SponsorshipModal = ({ isOpen, onClose }) => {
         <h2 className="text-xl font-mono font-black mb-2 uppercase italic text-sentinel-green italic font-headline tracking-tight">Sponsorship_Protocol</h2>
         <p className="text-gray-400 text-[10px] font-sans mb-8 uppercase tracking-[0.2em] font-black">시스템 유지 및 기부를 위한 후원</p>
         
-        <div className="space-y-6">
+        <div className="space-y-6 text-left">
           <div className="space-y-3">
             <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest px-1">Amount_Selection</p>
             <div className="grid grid-cols-3 gap-3">
@@ -121,6 +121,29 @@ const SponsorshipModal = ({ isOpen, onClose }) => {
   );
 };
 
+const BonusToast = ({ pulse }) => {
+  if (!pulse) return null;
+  const formatBonus = (sec) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `+${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20, scale: 0.9 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[500] pointer-events-none"
+    >
+      <div className="bg-sentinel-green text-black px-6 py-3 rounded-2xl shadow-[0_0_30px_rgba(0,255,148,0.4)] flex items-center gap-3 border border-white/20">
+        <span className="font-mono font-black text-lg">{formatBonus(pulse.amount)}</span>
+        <span className="font-sans font-bold text-xs uppercase tracking-tighter">보너스 생존 시간 획득!</span>
+      </div>
+    </motion.div>
+  );
+};
+
 const HallOfFame = () => {
   const [patrons, setPatrons] = useState([]);
 
@@ -141,7 +164,7 @@ const HallOfFame = () => {
           patrons.map((patron, i) => (
             <div key={patron.id} className="flex items-center justify-between p-4 rounded-2xl bg-sentinel-green/5 border border-sentinel-green/10 relative overflow-hidden group">
               <div className="absolute top-0 left-0 w-1 h-full bg-sentinel-green/30 group-hover:bg-sentinel-green transition-all"></div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 text-left">
                 <span className="font-mono font-black text-sentinel-green opacity-40">0{i+1}</span>
                 <div>
                   <div className="font-sans font-bold text-sm text-black dark:text-white flex items-center gap-2">
@@ -158,7 +181,7 @@ const HallOfFame = () => {
             </div>
           ))
         ) : (
-          <div className="py-12 text-center text-gray-500 font-mono text-[10px] uppercase tracking-widest animate-pulse">명예로운 후원자를 기다립니다...</div>
+          <div className="py-12 text-center text-gray-500 font-mono text-[10px] uppercase tracking-widest animate-pulse italic">명예로운 후원자를 기다립니다...</div>
         )}
       </div>
     </div>
@@ -196,14 +219,14 @@ const DonationModal = ({ isOpen, onClose }) => {
           <div className="flex-1 space-y-4">
             <div className="p-6 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5 shadow-inner">
               <p className="text-gray-400 font-sans text-[10px] uppercase tracking-widest mb-1 font-black">Total System Donation</p>
-              <p className="text-2xl font-mono font-black text-black dark:text-white uppercase italic tracking-tighter">총 기부금: <span className="text-sentinel-green">₩{totalDonation.toLocaleString()}</span></p>
+              <p className="text-2xl font-mono font-black text-black dark:text-white uppercase italic tracking-tighter text-left">총 기부금: <span className="text-sentinel-green">₩{totalDonation.toLocaleString()}</span></p>
             </div>
             <div className="space-y-3 text-left">
               <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed font-sans font-medium">
                 모든 생존 기록과 여러분의 소중한 후원금은 시스템의 가상 기부금으로 환산됩니다. 
-                축적된 기록은 분기별로 실제 사회 구헌 활동에 사용됩니다.
+                축적된 기록은 분기별로 실제 사회 공헌 활동에 사용됩니다.
               </p>
-              <div className="p-4 bg-sentinel-green/5 rounded-xl border border-sentinel-green/10">
+              <div className="p-4 bg-sentinel-green/5 rounded-xl border border-sentinel-green/10 text-left">
                 <p className="text-[11px] font-mono font-black text-sentinel-green uppercase tracking-tighter italic font-headline">
                   여러분의 후원금 중 50%인 ₩{(totalDonation * 0.5).toLocaleString()}이 기부되었습니다
                 </p>
@@ -263,7 +286,7 @@ const ThemeToggle = () => {
   return (
     <button 
       onClick={() => setIsDark(!isDark)}
-      className="p-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 hover:bg-sentinel-green/20 transition-all group shadow-sm"
+      className="p-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 hover:bg-sentinel-green/20 transition-all group shadow-sm shadow-xl"
       title="테마 전환"
     >
       <div className="w-5 h-5 flex items-center justify-center">
@@ -278,20 +301,34 @@ const ThemeToggle = () => {
 };
 
 const MinigameHub = () => {
+  const { addBonusTime } = useTimer();
   const games = [
-    { title: '메모리 핵', icon: '🧠', desc: '데이터 조각 일치시키기' },
-    { title: '그리드 런', icon: '🏃', desc: '패턴 장애물 회피' },
-    { title: '비트 탭', icon: '⚡', desc: '주파수 동기화 챌린지' }
+    { title: '메모리 핵', icon: '🧠', desc: '데이터 조각 일치시키기', baseScore: 100 },
+    { title: '그리드 런', icon: '🏃', desc: '패턴 장애물 회피', baseScore: 150 },
+    { title: '비트 탭', icon: '⚡', desc: '주파수 동기화 챌린지', baseScore: 200 }
   ];
+
+  const handleSimulateWin = (game) => {
+    const score = game.baseScore + Math.floor(Math.random() * 50);
+    addBonusTime(score);
+  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
       {games.map((game, i) => (
-        <div key={i} className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/10 p-5 rounded-3xl hover:border-sentinel-green/30 transition-all group cursor-pointer relative overflow-hidden shadow-sm">
+        <div 
+          key={i} 
+          onClick={() => handleSimulateWin(game)}
+          className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/10 p-5 rounded-3xl hover:border-sentinel-green/30 transition-all group cursor-pointer relative overflow-hidden shadow-sm active:scale-95 text-left"
+        >
           <div className="absolute top-0 right-0 p-3 opacity-20 font-mono text-[10px] uppercase tracking-widest font-black">v1.0</div>
           <div className="text-2xl mb-3 group-hover:scale-110 transition-transform inline-block">{game.icon}</div>
           <h4 className="font-mono font-black text-sm text-black dark:text-white mb-1 uppercase tracking-tighter italic font-headline">{game.title}</h4>
           <p className="text-[10px] text-gray-500 font-sans uppercase tracking-widest leading-tight font-bold">{game.desc}</p>
+          <div className="mt-4 flex items-center gap-1 text-sentinel-green/40 font-mono text-[8px] uppercase font-black group-hover:text-sentinel-green transition-colors">
+            <span>Click to complete</span>
+            <span className="animate-pulse">_</span>
+          </div>
         </div>
       ))}
     </div>
@@ -301,7 +338,7 @@ const MinigameHub = () => {
 const ShortcutGuide = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 font-sans" onClick={onClose}>
+    <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 font-sans text-left" onClick={onClose}>
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -353,11 +390,11 @@ const NicknameModal = () => {
       <motion.div 
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="max-w-md w-full bg-white dark:bg-sentinel-dark-card border border-sentinel-green/20 p-12 rounded-[40px] shadow-2xl relative overflow-hidden"
+        className="max-w-md w-full bg-white dark:bg-sentinel-dark-card border border-sentinel-green/20 p-12 rounded-[40px] shadow-2xl relative overflow-hidden shadow-xl"
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/20"></div>
-        <h2 className="text-3xl font-mono font-black mb-2 italic uppercase tracking-tighter text-black dark:text-white font-headline italic">ID 초기화</h2>
-        <p className="text-gray-400 text-[10px] font-sans mb-10 uppercase tracking-[0.2em] font-black">운영자 코드 등록이 필요합니다</p>
+        <h2 className="text-3xl font-mono font-black mb-2 italic uppercase tracking-tighter text-black dark:text-white font-headline italic tracking-tight text-left">ID 초기화</h2>
+        <p className="text-gray-400 text-[10px] font-sans mb-10 uppercase tracking-[0.2em] font-black text-left">운영자 코드 등록이 필요합니다</p>
         <form onSubmit={handleSubmit} className="space-y-8">
           <div className="relative">
             <input 
@@ -371,7 +408,7 @@ const NicknameModal = () => {
             <div className="absolute right-4 top-1/2 -translate-y-1/2 w-2 h-2 bg-sentinel-green/20 rounded-full"></div>
           </div>
           {error && (
-            <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-xl shadow-sm">
+            <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-xl shadow-sm text-left">
               <p className="text-red-500 text-[10px] font-black font-sans uppercase tracking-widest leading-relaxed">오류: {error}</p>
             </div>
           )}
@@ -389,6 +426,7 @@ const NicknameModal = () => {
 
 const LeaderboardTable = () => {
   const { formatTime } = useTimer();
+  const { user } = useAuth();
   const [competitors, setCompetitors] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -418,43 +456,55 @@ const LeaderboardTable = () => {
         <tbody className="relative min-h-[400px]">
           <AnimatePresence mode="popLayout">
             {competitors.length > 0 ? (
-              competitors.map((comp, index) => (
-                <motion.tr 
-                  key={comp.id}
-                  layout
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                  className="border-b border-sentinel-green/5 group transition-colors hover:bg-sentinel-green/5 dark:hover:bg-sentinel-green/10 shadow-sm"
-                >
-                  <td className="px-8 py-6 font-mono font-black text-xl text-sentinel-green flex items-center gap-2 tracking-tighter">
-                    {index === 0 ? <span className="text-2xl drop-shadow-lg">🥇</span> : `#${String(index + 1).padStart(2, '0')}`}
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className="flex items-center gap-4">
-                      <img src={comp.photoURL || 'https://via.placeholder.com/32'} className="w-8 h-8 rounded-full border border-sentinel-green/10 shadow-sm" />
-                      <div>
-                        <div className="font-sans font-bold text-sm text-black dark:text-white leading-none mb-1">{comp.nickname || 'Unknown'}</div>
-                        <div className="font-mono text-[8px] text-gray-400 uppercase tracking-widest font-black opacity-60">{comp.id.substring(0, 10)}</div>
+              competitors.map((comp, index) => {
+                const isMe = user?.uid === comp.id;
+                return (
+                  <motion.tr 
+                    key={comp.id}
+                    layout
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ 
+                      opacity: 1, 
+                      y: 0,
+                      backgroundColor: isMe ? "rgba(0, 255, 148, 0.05)" : "transparent"
+                    }}
+                    exit={{ opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    className={`border-b border-sentinel-green/5 group transition-colors hover:bg-sentinel-green/5 dark:hover:bg-sentinel-green/10 shadow-sm ${isMe ? 'ring-1 ring-inset ring-sentinel-green/20' : ''}`}
+                  >
+                    <td className="px-8 py-6 font-mono font-black text-xl text-sentinel-green flex items-center gap-2 tracking-tighter">
+                      {index === 0 ? <span className="text-2xl drop-shadow-lg">🥇</span> : `#${String(index + 1).padStart(2, '0')}`}
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-4 text-left">
+                        <img src={comp.photoURL || 'https://via.placeholder.com/32'} className="w-8 h-8 rounded-full border border-sentinel-green/10 shadow-sm" />
+                        <div>
+                          <div className={`font-sans font-bold text-sm leading-none mb-1 ${isMe ? 'text-sentinel-green' : 'text-black dark:text-white'}`}>
+                            {comp.nickname || 'Unknown'}
+                            {isMe && <span className="ml-2 text-[10px] bg-sentinel-green/20 px-1.5 py-0.5 rounded uppercase tracking-tighter font-black">You</span>}
+                          </div>
+                          <div className="font-mono text-[8px] text-gray-400 uppercase tracking-widest font-black opacity-60 text-left">{comp.id.substring(0, 10)}</div>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6 text-center">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest font-headline shadow-sm ${
-                      comp.status === 'ONLINE' ? 'bg-sentinel-green/10 text-sentinel-green' : 'bg-gray-100 dark:bg-white/5 text-gray-400'
-                    }`}>
-                      <span className={`w-1 h-1 rounded-full ${comp.status === 'ONLINE' ? 'bg-sentinel-green animate-pulse shadow-[0_0_5px_rgba(0,255,148,0.8)]' : 'bg-gray-400'}`}></span>
-                      {comp.status === 'ONLINE' ? '실시간' : '오프라인'}
-                    </span>
-                  </td>
-                  <td className="px-8 py-6 text-right font-mono font-bold text-sm tracking-widest text-black dark:text-white italic">{formatTime(comp.survival_time || 0)}</td>
-                </motion.tr>
-              ))
+                    </td>
+                    <td className="px-8 py-6 text-center">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest font-headline shadow-sm ${
+                        comp.status === 'ONLINE' ? 'bg-sentinel-green/10 text-sentinel-green' : 'bg-gray-100 dark:bg-white/5 text-gray-400 opacity-50'
+                      }`}>
+                        <span className={`w-1 h-1 rounded-full ${comp.status === 'ONLINE' ? 'bg-sentinel-green animate-pulse shadow-[0_0_5px_rgba(0,255,148,0.8)]' : 'bg-gray-400'}`}></span>
+                        {comp.status === 'ONLINE' ? '실시간' : '오프라인'}
+                      </span>
+                    </td>
+                    <td className={`px-8 py-6 text-right font-mono font-bold text-sm tracking-widest italic ${isMe ? 'text-sentinel-green scale-110' : 'text-black dark:text-white'}`}>
+                      {formatTime(comp.survival_time || 0)}
+                    </td>
+                  </motion.tr>
+                );
+              })
             ) : (
               <tr>
                 <td colSpan="4" className="px-8 py-20 text-center">
-                  <div className="font-mono text-sm text-gray-400 uppercase tracking-[0.3em] font-black shadow-sm">
+                  <div className="font-mono text-sm text-gray-400 uppercase tracking-[0.3em] font-black shadow-sm text-center">
                     {loading ? '데이터 동기화 중...' : <TypingText text="생존자를 탐색 중입니다..." />}
                   </div>
                 </td>
@@ -499,14 +549,14 @@ const Chat = () => {
   };
 
   return (
-    <aside className="w-full lg:w-80 flex flex-col bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden h-full backdrop-blur-sm shadow-sm font-sans text-left text-left">
+    <aside className="w-full lg:w-80 flex flex-col bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden h-full backdrop-blur-sm shadow-sm font-sans text-left text-left shadow-xl">
       <div className="p-6 border-b border-sentinel-green/10 bg-sentinel-green/5 flex items-center justify-between">
         <h3 className="font-mono font-black text-xs tracking-tighter flex items-center gap-2 uppercase italic text-sentinel-green font-headline tracking-tight">
           라이브 채널
         </h3>
         <LiveDot />
       </div>
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide text-left">
         {messages.map(msg => (
           <div key={msg.id} className="space-y-1">
             <div className="flex items-center justify-between">
@@ -532,7 +582,7 @@ const Chat = () => {
           </form>
         ) : (
           <div className="text-center py-2 text-center">
-            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest mb-3 italic font-black opacity-60">통신을 위해 권한이 필요합니다</p>
+            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest mb-3 italic font-black opacity-60 font-sans">통신을 위해 권한이 필요합니다</p>
             <button onClick={() => window.scrollTo(0, 0)} className="w-full bg-black dark:bg-sentinel-green dark:text-black text-sentinel-green py-3 rounded-xl font-mono font-black text-[10px] uppercase border border-sentinel-green/20 hover:bg-sentinel-green hover:text-black transition-all shadow-lg font-headline">보안 엑세스</button>
           </div>
         )}
@@ -544,7 +594,7 @@ const Chat = () => {
 // --- App Root ---
 
 function App() {
-  const { isActive, isTerminated, formatTime, survivalTime, resumeHere } = useTimer();
+  const { isActive, isTerminated, formatTime, survivalTime, resumeHere, bonusPulse } = useTimer();
   const { user, profile, showNicknameModal, isAdmin, loginWithGoogle } = useAuth();
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
@@ -607,7 +657,7 @@ function App() {
   }, [isAdmin]);
 
   return (
-    <div className="min-h-screen bg-white dark:bg-sentinel-dark-bg text-black dark:text-white font-sans selection:bg-sentinel-green selection:text-black antialiased transition-colors duration-500 font-sans text-left">
+    <div className="min-h-screen bg-white dark:bg-sentinel-dark-bg text-black dark:text-white selection:bg-sentinel-green selection:text-black antialiased transition-colors duration-500 font-sans text-left overflow-x-hidden">
       {(!isActive || isTerminated) && (
         <div className="fixed inset-0 z-[200] bg-white/95 dark:bg-black/95 backdrop-blur-xl flex items-center justify-center p-6 text-center">
           <div className="max-w-md w-full space-y-8 font-sans text-center">
@@ -645,7 +695,7 @@ function App() {
         <div className="pointer-events-auto flex items-center gap-3">
           <button 
             onClick={() => setIsSponsorshipOpen(true)}
-            className="px-4 py-2 rounded-xl border border-sentinel-green/50 text-sentinel-green font-sans font-black text-[10px] uppercase tracking-widest hover:bg-sentinel-green hover:text-black transition-all shadow-xl font-headline"
+            className="px-4 py-2 rounded-xl border border-sentinel-green/50 text-sentinel-green font-sans font-black text-[10px] uppercase tracking-widest hover:bg-sentinel-green hover:text-black transition-all shadow-xl font-headline shadow-inner"
           >
             후원하기
           </button>
@@ -660,7 +710,7 @@ function App() {
       </header>
 
       {user ? (
-        <div className="max-w-7xl mx-auto px-4 pt-24 pb-12 grid grid-cols-1 lg:grid-cols-12 gap-8 min-h-screen">
+        <div className="max-w-7xl mx-auto px-4 pt-24 pb-12 grid grid-cols-1 lg:grid-cols-12 gap-8 min-h-screen text-left">
           {/* Left Column */}
           <div className="lg:col-span-8 space-y-8">
             {/* Modules Grid */}
@@ -672,7 +722,7 @@ function App() {
                   <LiveDot />
                 </div>
                 <h1 className="text-3xl font-mono font-black tracking-tighter uppercase italic text-black dark:text-white mb-2 font-headline italic">디지털 센티널</h1>
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4 text-left">
                   <p className="font-sans text-[10px] text-gray-500 uppercase tracking-widest font-black opacity-80">
                     오늘의 경쟁자: <span className="text-sentinel-green font-black">1,248명</span>
                   </p>
@@ -694,11 +744,13 @@ function App() {
               {/* Module 2: Survival Timer */}
               <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm relative shadow-sm hover:shadow-sentinel-green/5 transition-all text-left shadow-xl">
                 <div className="flex justify-between items-start mb-6 font-sans">
-                  <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight">Module_02: 생존_카운트</h3>
+                  <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left">Module_02: 생존_카운트</h3>
                   <LiveDot />
                 </div>
-                <div className="flex flex-col justify-center py-2">
-                  <p className="font-mono text-5xl font-black text-sentinel-green tracking-[0.2em] glow-green drop-shadow-2xl italic">{formatTime(survivalTime)}</p>
+                <div className="flex flex-col justify-center py-2 text-left">
+                  <p className={`font-mono text-5xl font-black tracking-[0.2em] glow-green drop-shadow-2xl italic transition-all duration-300 ${bonusPulse ? 'text-white scale-110 shadow-[0_0_30px_rgba(0,255,148,0.6)]' : 'text-sentinel-green'}`}>
+                    {formatTime(survivalTime)}
+                  </p>
                   <p className="font-mono text-[8px] text-gray-400 dark:text-gray-500 mt-4 uppercase tracking-[0.2em] font-black font-sans italic opacity-60">10초마다 데이터 클라우드 동기화 중...</p>
                 </div>
               </div>
@@ -733,7 +785,7 @@ function App() {
 
           {/* Right Column: Communication */}
           <div className="lg:col-span-4 h-full flex flex-col space-y-4 font-sans text-left">
-            <div className="flex items-center justify-between px-2">
+            <div className="flex items-center justify-between px-2 text-left">
               <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight">Module_04: 시스템_통신</h3>
               <span className="font-mono text-[9px] text-sentinel-green/60 uppercase italic font-headline tracking-widest opacity-60 italic">Secure Link Active</span>
             </div>
@@ -741,21 +793,21 @@ function App() {
           </div>
         </div>
       ) : (
-        <div className="min-h-screen flex items-center justify-center p-6 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-sentinel-green/10 dark:from-sentinel-green/5 via-transparent to-transparent relative font-sans text-center">
-          <div className="max-w-md w-full bg-white dark:bg-sentinel-dark-card border border-gray-100 dark:border-sentinel-green/10 rounded-[48px] shadow-2xl p-12 text-center relative overflow-hidden">
+        <div className="min-h-screen flex items-center justify-center p-6 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-sentinel-green/10 dark:from-sentinel-green/5 via-transparent to-transparent relative font-sans text-center overflow-x-hidden">
+          <div className="max-w-md w-full bg-white dark:bg-sentinel-dark-card border border-gray-100 dark:border-sentinel-green/10 rounded-[48px] shadow-2xl p-12 text-center relative overflow-hidden shadow-2xl">
             <div className="absolute top-0 left-0 w-full h-1.5 bg-sentinel-green shadow-[0_0_15px_rgba(0,255,148,0.5)]"></div>
             <div className="w-24 h-24 bg-black dark:bg-sentinel-green rounded-[32px] mx-auto flex items-center justify-center mb-10 shadow-2xl rotate-6 transition-transform hover:rotate-12 duration-500 shadow-xl">
-              <span className="text-4xl dark:grayscale drop-shadow-xl">🛡️</span>
+              <span className="text-4xl dark:grayscale drop-shadow-xl shadow-2xl">🛡️</span>
             </div>
             <h2 className="text-4xl font-mono font-black mb-4 uppercase italic tracking-tighter text-black dark:text-white italic tracking-tight font-headline">DIGITAL SENTINEL</h2>
-            <p className="text-gray-500 dark:text-gray-400 font-sans text-[11px] uppercase tracking-[0.3em] mb-12 leading-relaxed italic font-black opacity-80">권한이 필요합니다<br/>보안 프로토콜 초기화 중</p>
+            <p className="text-gray-500 dark:text-gray-400 font-sans text-[11px] uppercase tracking-[0.3em] mb-12 leading-relaxed italic font-black opacity-80 text-center">권한이 필요합니다<br/>보안 프로토콜 초기화 중</p>
             <button
               className="w-full py-5 bg-black dark:bg-sentinel-green dark:text-black hover:bg-sentinel-green dark:hover:bg-sentinel-green/80 text-white hover:text-black font-mono font-black text-sm rounded-[24px] transition-all duration-500 uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.1)] hover:shadow-sentinel-green/30 active:scale-95 font-headline"
               onClick={loginWithGoogle}
             >
               Google로 접속
             </button>
-            <p className="mt-10 font-mono text-[9px] text-gray-300 dark:text-gray-600 uppercase tracking-[0.5em] font-black opacity-40 italic">SENTINEL_SYSTEM_V2.4</p>
+            <p className="mt-10 font-mono text-[9px] text-gray-300 dark:text-gray-600 uppercase tracking-[0.5em] font-black opacity-40 italic font-sans text-center">SENTINEL_SYSTEM_V2.4</p>
           </div>
         </div>
       )}
@@ -765,6 +817,7 @@ function App() {
       <ShortcutGuide isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
       <DonationModal isOpen={isDonationOpen} onClose={() => setIsDonationOpen(false)} />
       <SponsorshipModal isOpen={isSponsorshipOpen} onClose={() => setIsSponsorshipOpen(false)} />
+      <BonusToast pulse={bonusPulse} />
     </div>
   );
 }

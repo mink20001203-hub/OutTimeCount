@@ -15,6 +15,7 @@ export const TimerProvider = ({ children }) => {
   const [isActive, setIsActive] = useState(true);
   const [isTerminated, setIsTerminated] = useState(false);
   const [tabId] = useState(() => generateTabId());
+  const [bonusPulse, setBonusPulse] = useState(null); // { amount: number, id: string }
   const channelRef = useRef(null);
   const lastSyncRef = useRef(0);
 
@@ -24,6 +25,29 @@ export const TimerProvider = ({ children }) => {
     const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
     const s = (seconds % 60).toString().padStart(2, '0');
     return `${h}:${m}:${s}`;
+  };
+
+  const addBonusTime = async (seconds) => {
+    if (!isActive || isTerminated) return;
+    
+    setSurvivalTime((prev) => {
+      const next = prev + seconds;
+      localStorage.setItem('survival_seconds', next.toString());
+      
+      // 즉시 DB 반영 (보너스 점수의 경우 실시간 순위 반영을 위해)
+      if (user) {
+        updateDoc(doc(db, 'users', user.uid), {
+          survival_time: next,
+          last_updated: serverTimestamp()
+        });
+      }
+      return next;
+    });
+
+    // 시각적 피드백 트리거
+    const effectId = Math.random().toString(36).substring(7);
+    setBonusPulse({ amount: seconds, id: effectId });
+    setTimeout(() => setBonusPulse(null), 3000);
   };
 
   // 자정(UTC+0) 초기화 로직
@@ -132,7 +156,10 @@ export const TimerProvider = ({ children }) => {
   };
 
   return (
-    <TimerContext.Provider value={{ survivalTime, formatTime, isActive, isTerminated, resumeHere }}>
+    <TimerContext.Provider value={{ 
+      survivalTime, formatTime, isActive, isTerminated, resumeHere,
+      addBonusTime, bonusPulse 
+    }}>
       {children}
     </TimerContext.Provider>
   );
