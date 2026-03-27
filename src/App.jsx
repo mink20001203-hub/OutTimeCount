@@ -9,10 +9,105 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminTerminal from './context/AdminTerminal';
 
+import { loadTossPayments } from '@tosspayments/payment-sdk';
+
 // --- Components ---
 
-const DonationModal = ({ isOpen, onClose }) => {
+const SponsorshipModal = ({ isOpen, onClose, onPaymentSuccess }) => {
+  const [amount, setAmount] = useState(5000);
+  const { user, profile } = useAuth();
+
   if (!isOpen) return null;
+
+  const handleTossPayment = async () => {
+    const clientKey = 'test_ck_D5akZ081ROnLz7V5vL7VrsW4u0yx'; // 테스트 키
+    const tossPayments = await loadTossPayments(clientKey);
+
+    try {
+      await tossPayments.requestPayment('카드', {
+        amount: amount,
+        orderId: `don_${Math.random().toString(36).substring(2, 11)}`,
+        orderName: 'Digital Sentinel 시스템 후원',
+        customerName: profile?.nickname || 'Guest',
+        successUrl: window.location.origin + '?payment=success&amount=' + amount,
+        failUrl: window.location.origin + '?payment=fail',
+      });
+    } catch (error) {
+      console.error('Payment error:', error);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6" onClick={onClose}>
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="max-w-md w-full bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl overflow-hidden relative text-left"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/30"></div>
+        <h2 className="text-xl font-mono font-black mb-2 uppercase italic text-sentinel-green italic">Sponsorship_Protocol</h2>
+        <p className="text-gray-400 text-[10px] font-mono mb-8 uppercase tracking-[0.2em]">시스템 유지 및 기부를 위한 후원</p>
+        
+        <div className="space-y-6">
+          <div className="grid grid-cols-3 gap-3">
+            {[5000, 10000, 20000].map(amt => (
+              <button 
+                key={amt}
+                onClick={() => setAmount(amt)}
+                className={`py-3 rounded-xl border font-mono font-bold text-xs transition-all ${
+                  amount === amt ? 'bg-sentinel-green text-black border-sentinel-green' : 'bg-transparent text-gray-500 border-white/10 hover:border-sentinel-green/50'
+                }`}
+              >
+                ₩{amt.toLocaleString()}
+              </button>
+            ))}
+          </div>
+
+          <button 
+            onClick={handleTossPayment}
+            className="w-full py-4 bg-[#0064FF] text-white font-mono font-black text-sm uppercase tracking-widest rounded-2xl hover:opacity-90 transition-all flex items-center justify-center gap-2"
+          >
+            <span className="text-lg">💳</span> 토스 페이먼츠 결제
+          </button>
+
+          <div className="relative py-4">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
+            <div className="relative flex justify-center text-[8px] uppercase font-mono text-gray-600 bg-white dark:bg-[#0A0A0A] px-2 tracking-[0.3em]">International Support</div>
+          </div>
+
+          <a 
+            href="https://www.buymeacoffee.com/noguen" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="w-full py-4 bg-[#FFDD00] text-black font-mono font-black text-sm uppercase tracking-widest rounded-2xl hover:opacity-90 transition-all flex items-center justify-center gap-2"
+          >
+            <span className="text-lg">☕</span> Buy Me a Coffee
+          </a>
+        </div>
+
+        <button onClick={onClose} className="mt-8 w-full py-3 text-gray-500 font-mono font-bold text-[10px] uppercase tracking-widest hover:text-white transition-colors">취소</button>
+      </motion.div>
+    </div>
+  );
+};
+
+const DonationModal = ({ isOpen, onClose }) => {
+  const [totalDonation, setTotalDonation] = useState(0);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const q = query(collection(db, 'donations'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let total = 0;
+      snapshot.forEach(doc => total += (doc.data().amount || 0));
+      setTotalDonation(total);
+    });
+    return () => unsubscribe();
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6" onClick={onClose}>
       <motion.div 
@@ -27,23 +122,30 @@ const DonationModal = ({ isOpen, onClose }) => {
         <div className="flex flex-col md:flex-row gap-8 items-center text-left">
           <div className="flex-1 space-y-4">
             <div className="p-6 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5">
-              <p className="text-gray-400 font-mono text-[10px] uppercase tracking-widest mb-1">Current Status</p>
-              <p className="text-2xl font-mono font-black text-black dark:text-white uppercase italic">총 기부금: <span className="text-sentinel-green">₩0</span></p>
+              <p className="text-gray-400 font-mono text-[10px] uppercase tracking-widest mb-1">Total System Donation</p>
+              <p className="text-2xl font-mono font-black text-black dark:text-white uppercase italic">총 기부금: <span className="text-sentinel-green">₩{totalDonation.toLocaleString()}</span></p>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed font-sans">
-              모든 생존 기록은 시스템의 가상 기부금으로 환산됩니다. 
-              축적된 기록은 분기별로 실제 사회 공헌 활동에 사용되며, 
-              이 증서는 여러분의 인내와 기여를 증명합니다.
-            </p>
+            <div className="space-y-2">
+              <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed font-sans">
+                모든 생존 기록과 여러분의 소중한 후원금은 시스템의 가상 기부금으로 환산됩니다. 
+                축적된 기록은 분기별로 실제 사회 공헌 활동에 사용됩니다.
+              </p>
+              <div className="p-3 bg-sentinel-green/5 rounded-xl border border-sentinel-green/10">
+                <p className="text-[10px] font-mono font-black text-sentinel-green uppercase tracking-tighter italic">
+                  여러분의 후원금 중 50%인 ₩{(totalDonation * 0.5).toLocaleString()}이 기부되었습니다
+                </p>
+              </div>
+            </div>
           </div>
           
-          <div className="w-full md:w-64 aspect-[3/4] bg-black/10 dark:bg-white/5 rounded-2xl border border-dashed border-sentinel-green/20 flex items-center justify-center relative group">
-            <span className="text-gray-500 font-mono text-[10px] uppercase tracking-widest text-center px-4 group-hover:text-sentinel-green transition-colors">기부 확인증 이미지가<br/>이곳에 배치됩니다</span>
+          <div className="w-full md:w-64 aspect-[3/4] bg-black/10 dark:bg-white/5 rounded-2xl border border-dashed border-sentinel-green/20 flex items-center justify-center relative group overflow-hidden">
+            <div className="absolute inset-0 bg-[url('https://api.placeholder.com/300/400')] bg-cover bg-center opacity-20 grayscale group-hover:grayscale-0 transition-all duration-700"></div>
+            <span className="relative z-10 text-gray-500 font-mono text-[10px] uppercase tracking-widest text-center px-4 group-hover:text-sentinel-green transition-colors">CERTIFICATE_IMAGE_V2.4</span>
             <div className="absolute inset-0 bg-sentinel-green/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl"></div>
           </div>
         </div>
 
-        <button onClick={onClose} className="mt-8 w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-mono font-bold text-xs uppercase tracking-widest rounded-2xl hover:bg-sentinel-green hover:text-black transition-all">확인</button>
+        <button onClick={onClose} className="mt-8 w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-mono font-bold text-xs uppercase tracking-widest rounded-2xl hover:bg-sentinel-green hover:text-black transition-all shadow-xl">확인 및 복귀</button>
       </motion.div>
     </div>
   );
@@ -370,10 +472,38 @@ const Chat = () => {
 
 function App() {
   const { isActive, isTerminated, formatTime, survivalTime, resumeHere } = useTimer();
-  const { user, showNicknameModal, isAdmin, loginWithGoogle } = useAuth();
+  const { user, profile, showNicknameModal, isAdmin, loginWithGoogle } = useAuth();
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isDonationOpen, setIsDonationOpen] = useState(false);
+  const [isSponsorshipOpen, setIsSponsorshipOpen] = useState(false);
+
+  // 결제 결과 확인 및 기록
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const status = urlParams.get('payment');
+    const amount = urlParams.get('amount');
+
+    if (status === 'success' && amount && user) {
+      const recordDonation = async () => {
+        try {
+          await addDoc(collection(db, 'donations'), {
+            uid: user.uid,
+            nickname: profile?.nickname || 'Anonymous',
+            amount: parseInt(amount),
+            timestamp: serverTimestamp()
+          });
+          // URL 파라미터 제거
+          window.history.replaceState({}, document.title, window.location.pathname);
+          alert('기부 증서 발급 완료!');
+          setIsDonationOpen(true);
+        } catch (error) {
+          console.error('Donation recording failed:', error);
+        }
+      };
+      recordDonation();
+    }
+  }, [user, profile]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -470,7 +600,14 @@ function App() {
                     onClick={() => setIsDonationOpen(true)}
                     className="font-mono text-[10px] text-sentinel-green hover:underline uppercase tracking-widest font-black"
                   >
-                    기부 확인증 보기
+                    기부 확인증
+                  </button>
+                  <div className="h-4 w-px bg-gray-200 dark:bg-white/10"></div>
+                  <button 
+                    onClick={() => setIsSponsorshipOpen(true)}
+                    className="font-mono text-[10px] text-sentinel-green hover:underline uppercase tracking-widest font-black"
+                  >
+                    시스템 후원
                   </button>
                 </div>
                 <div className="mt-8 flex gap-1.5">
@@ -544,6 +681,7 @@ function App() {
       {isAdmin && <AdminTerminal isOpen={isTerminalOpen} onClose={() => setIsTerminalOpen(false)} />}
       <ShortcutGuide isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
       <DonationModal isOpen={isDonationOpen} onClose={() => setIsDonationOpen(false)} />
+      <SponsorshipModal isOpen={isSponsorshipOpen} onClose={() => setIsSponsorshipOpen(false)} />
     </div>
   );
 }
