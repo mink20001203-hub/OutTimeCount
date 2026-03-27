@@ -644,6 +644,12 @@ function App() {
           </div>
         </div>
         <div className="pointer-events-auto flex items-center gap-3">
+          <button 
+            onClick={() => setIsSponsorshipOpen(true)}
+            className="px-4 py-2 rounded-xl border border-sentinel-green/50 text-sentinel-green font-sans font-bold text-[10px] uppercase tracking-widest hover:bg-sentinel-green hover:text-black transition-all shadow-sm"
+          >
+            후원하기
+          </button>
           <ThemeToggle />
           <button 
             onClick={() => setIsGuideOpen(true)}
@@ -706,20 +712,20 @@ function App() {
               </div>
             </div>
 
-            {/* Module 3: Leaderboard & Hall of Fame */}
+            {/* Module 3: Hall of Fame & Leaderboard (Swapped) */}
             <div className="space-y-4 text-left">
               <div className="flex items-center justify-between px-4">
                 <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-bold">Module_03: 실시간_데이터_센터</h3>
                 <span className="font-mono text-[9px] text-sentinel-green/60 uppercase italic tracking-widest">NETWORK_ACTIVE</span>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <p className="font-mono text-[8px] text-gray-500 uppercase px-2 tracking-widest">Live_Survival_Rank</p>
-                  <LeaderboardTable />
-                </div>
-                <div className="space-y-4">
+                <div className="space-y-4 order-2 xl:order-1">
                   <p className="font-mono text-[8px] text-gray-500 uppercase px-2 tracking-widest">Patron_Hall_of_Fame</p>
                   <HallOfFame />
+                </div>
+                <div className="space-y-4 order-1 xl:order-2">
+                  <p className="font-mono text-[8px] text-gray-500 uppercase px-2 tracking-widest">Live_Survival_Rank</p>
+                  <LeaderboardTable />
                 </div>
               </div>
             </div>
