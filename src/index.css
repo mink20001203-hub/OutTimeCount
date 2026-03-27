@@ -1,0 +1,57 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+:root {
+  font-family: 'Inter', 'Pretendard', system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+body {
+  @apply bg-white text-black transition-colors duration-300;
+}
+
+.dark body {
+  @apply bg-sentinel-dark-bg text-white;
+  background-image: 
+    linear-gradient(to right, rgba(0, 255, 148, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 255, 148, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+@layer components {
+  .glow-green {
+    text-shadow: 0 0 10px rgba(0, 255, 148, 0.5), 0 0 20px rgba(0, 255, 148, 0.3);
+  }
+  .pulsing-green {
+    @apply relative flex h-2 w-2;
+  }
+  .pulsing-green::after {
+    @apply absolute inline-flex h-full w-full animate-ping rounded-full bg-sentinel-green opacity-75;
+    content: "";
+  }
+}
+
+@keyframes pulse-light {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse-slow {
+  animation: pulse-light 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
