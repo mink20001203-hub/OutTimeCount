@@ -13,14 +13,21 @@ import { loadTossPayments } from '@tosspayments/payment-sdk';
 
 // --- Components ---
 
-const SponsorshipModal = ({ isOpen, onClose, onPaymentSuccess }) => {
+const SponsorshipModal = ({ isOpen, onClose }) => {
   const [amount, setAmount] = useState(5000);
+  const [destination, setDestination] = useState('UNICEF');
   const { user, profile } = useAuth();
 
   if (!isOpen) return null;
 
+  const destinations = [
+    { id: 'UNICEF', name: '유니세프 (아동 구호)', icon: '💙' },
+    { id: 'WWF', name: 'WWF (자연 보호)', icon: '🐼' },
+    { id: 'DOCTORS', name: '국경없는의사회 (의료)', icon: '🏥' },
+  ];
+
   const handleTossPayment = async () => {
-    const clientKey = 'test_ck_D5akZ081ROnLz7V5vL7VrsW4u0yx'; // 테스트 키
+    const clientKey = 'test_ck_D5akZ081ROnLz7V5vL7VrsW4u0yx';
     const tossPayments = await loadTossPayments(clientKey);
 
     try {
@@ -29,8 +36,8 @@ const SponsorshipModal = ({ isOpen, onClose, onPaymentSuccess }) => {
         orderId: `don_${Math.random().toString(36).substring(2, 11)}`,
         orderName: 'Digital Sentinel 시스템 후원',
         customerName: profile?.nickname || 'Guest',
-        successUrl: window.location.origin + '?payment=success&amount=' + amount,
-        failUrl: window.location.origin + '?payment=fail',
+        successUrl: `${window.location.origin}?payment=success&amount=${amount}&to=${destination}`,
+        failUrl: `${window.location.origin}?payment=fail`,
       });
     } catch (error) {
       console.error('Payment error:', error);
@@ -50,18 +57,40 @@ const SponsorshipModal = ({ isOpen, onClose, onPaymentSuccess }) => {
         <p className="text-gray-400 text-[10px] font-mono mb-8 uppercase tracking-[0.2em]">시스템 유지 및 기부를 위한 후원</p>
         
         <div className="space-y-6">
-          <div className="grid grid-cols-3 gap-3">
-            {[5000, 10000, 20000].map(amt => (
-              <button 
-                key={amt}
-                onClick={() => setAmount(amt)}
-                className={`py-3 rounded-xl border font-mono font-bold text-xs transition-all ${
-                  amount === amt ? 'bg-sentinel-green text-black border-sentinel-green' : 'bg-transparent text-gray-500 border-white/10 hover:border-sentinel-green/50'
-                }`}
-              >
-                ₩{amt.toLocaleString()}
-              </button>
-            ))}
+          <div className="space-y-3">
+            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest px-1">Amount_Selection</p>
+            <div className="grid grid-cols-3 gap-3">
+              {[5000, 10000, 20000].map(amt => (
+                <button 
+                  key={amt}
+                  onClick={() => setAmount(amt)}
+                  className={`py-3 rounded-xl border font-mono font-bold text-xs transition-all ${
+                    amount === amt ? 'bg-sentinel-green text-black border-sentinel-green' : 'bg-transparent text-gray-500 border-white/10 hover:border-sentinel-green/50'
+                  }`}
+                >
+                  ₩{amt.toLocaleString()}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest px-1">Donation_Destination</p>
+            <div className="space-y-2">
+              {destinations.map(dest => (
+                <button
+                  key={dest.id}
+                  onClick={() => setDestination(dest.id)}
+                  className={`w-full p-4 rounded-2xl border text-left flex items-center gap-4 transition-all ${
+                    destination === dest.id ? 'bg-sentinel-green/10 border-sentinel-green' : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-sentinel-green/30'
+                  }`}
+                >
+                  <span className="text-xl">{dest.icon}</span>
+                  <span className="font-sans font-bold text-xs text-black dark:text-white">{dest.name}</span>
+                  {destination === dest.id && <div className="ml-auto w-2 h-2 bg-sentinel-green rounded-full animate-pulse"></div>}
+                </button>
+              ))}
+            </div>
           </div>
 
           <button 
@@ -71,7 +100,7 @@ const SponsorshipModal = ({ isOpen, onClose, onPaymentSuccess }) => {
             <span className="text-lg">💳</span> 토스 페이먼츠 결제
           </button>
 
-          <div className="relative py-4">
+          <div className="relative py-2">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
             <div className="relative flex justify-center text-[8px] uppercase font-mono text-gray-600 bg-white dark:bg-[#0A0A0A] px-2 tracking-[0.3em]">International Support</div>
           </div>
@@ -86,8 +115,53 @@ const SponsorshipModal = ({ isOpen, onClose, onPaymentSuccess }) => {
           </a>
         </div>
 
-        <button onClick={onClose} className="mt-8 w-full py-3 text-gray-500 font-mono font-bold text-[10px] uppercase tracking-widest hover:text-white transition-colors">취소</button>
+        <button onClick={onClose} className="mt-6 w-full py-3 text-gray-500 font-mono font-bold text-[10px] uppercase tracking-widest hover:text-white transition-colors">취소</button>
       </motion.div>
+    </div>
+  );
+};
+
+const HallOfFame = () => {
+  const [patrons, setPatrons] = useState([]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'donations'), orderBy('amount', 'desc'), limit(5));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // 중복 별명 합산 로직 (선택적)
+      setPatrons(data);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  return (
+    <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm shadow-sm">
+      <h3 className="font-mono text-[10px] text-sentinel-green uppercase tracking-[0.3em] italic font-black mb-6">Honorable_Patrons</h3>
+      <div className="space-y-4">
+        {patrons.length > 0 ? (
+          patrons.map((patron, i) => (
+            <div key={patron.id} className="flex items-center justify-between p-4 rounded-2xl bg-sentinel-green/5 border border-sentinel-green/10 relative overflow-hidden group">
+              <div className="absolute top-0 left-0 w-1 h-full bg-sentinel-green/30"></div>
+              <div className="flex items-center gap-4">
+                <span className="font-mono font-black text-sentinel-green opacity-40">0{i+1}</span>
+                <div>
+                  <div className="font-sans font-bold text-sm text-black dark:text-white flex items-center gap-2">
+                    {patron.nickname}
+                    <span className="text-xs">🎖️</span>
+                  </div>
+                  <div className="font-mono text-[8px] text-gray-500 uppercase tracking-widest">명예로운 운영자</div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-mono font-bold text-xs text-sentinel-green italic">₩{patron.amount.toLocaleString()}</div>
+                <div className="font-mono text-[7px] text-gray-500 uppercase">{patron.to || 'UNICEF'}</div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="py-12 text-center text-gray-500 font-mono text-[10px] uppercase tracking-widest animate-pulse">명예로운 후원자를 기다립니다...</div>
+        )}
+      </div>
     </div>
   );
 };
@@ -483,6 +557,7 @@ function App() {
     const urlParams = new URLSearchParams(window.location.search);
     const status = urlParams.get('payment');
     const amount = urlParams.get('amount');
+    const to = urlParams.get('to');
 
     if (status === 'success' && amount && user) {
       const recordDonation = async () => {
@@ -491,6 +566,7 @@ function App() {
             uid: user.uid,
             nickname: profile?.nickname || 'Anonymous',
             amount: parseInt(amount),
+            to: to || 'UNICEF',
             timestamp: serverTimestamp()
           });
           // URL 파라미터 제거
@@ -630,13 +706,22 @@ function App() {
               </div>
             </div>
 
-            {/* Module 3: Leaderboard */}
-            <div className="space-y-4">
+            {/* Module 3: Leaderboard & Hall of Fame */}
+            <div className="space-y-4 text-left">
               <div className="flex items-center justify-between px-4">
-                <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-bold">Module_03: 실시간_리더보드</h3>
-                <span className="font-mono text-[9px] text-sentinel-green/60 uppercase italic tracking-widest">SYNC_READY</span>
+                <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-bold">Module_03: 실시간_데이터_센터</h3>
+                <span className="font-mono text-[9px] text-sentinel-green/60 uppercase italic tracking-widest">NETWORK_ACTIVE</span>
               </div>
-              <LeaderboardTable />
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <p className="font-mono text-[8px] text-gray-500 uppercase px-2 tracking-widest">Live_Survival_Rank</p>
+                  <LeaderboardTable />
+                </div>
+                <div className="space-y-4">
+                  <p className="font-mono text-[8px] text-gray-500 uppercase px-2 tracking-widest">Patron_Hall_of_Fame</p>
+                  <HallOfFame />
+                </div>
+              </div>
             </div>
 
             {/* Minigame Hub */}

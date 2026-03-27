@@ -16,9 +16,9 @@ export default {
         'sentinel-black': '#121212',
       },
       fontFamily: {
-        sans: ['"Inter"', '"Pretendard"', 'sans-serif'],
+        sans: ['"Noto Sans KR"', '"Inter"', '"Pretendard"', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'monospace'],
-        headline: ['"Inter"', 'sans-serif'],
+        headline: ['"Noto Sans KR"', 'sans-serif'],
       },
       animation: {
         'pulse-gentle': 'pulse-gentle 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
