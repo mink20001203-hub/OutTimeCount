@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { auth, googleProvider, db } from '../firebase';
 import { signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 
 const AuthContext = createContext();
 
@@ -55,6 +55,19 @@ export const AuthProvider = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
+  // Real-time profile listener
+  useEffect(() => {
+    if (!user) return;
+
+    const userRef = doc(db, 'users', user.uid);
+    const unsubscribe = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setProfile(docSnap.data());
+      }
+    });
+    return () => unsubscribe();
+  }, [user]);
+
   const loginWithGoogle = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
@@ -66,7 +79,9 @@ export const AuthProvider = ({ children }) => {
   const logout = () => signOut(auth);
 
   const updateNickname = async (newNickname) => {
-    if (!user) return;
+    if (!user) {
+      throw new Error("로그인이 필요합니다.");
+    }
     const now = Date.now();
     const cooldown = 24 * 60 * 60 * 1000; // 24시간
     const lastChange = profile?.last_nickname_change?.toMillis ? profile.last_nickname_change.toMillis() : (profile?.last_nickname_change || 0);
@@ -81,14 +96,28 @@ export const AuthProvider = ({ children }) => {
       throw new Error("별명은 2~12자 한글, 영문, 숫자, 언더바(_)만 가능합니다.");
     }
 
-    const userRef = doc(db, 'users', user.uid);
-    await updateDoc(userRef, {
-      nickname: newNickname,
-      last_nickname_change: serverTimestamp()
-    });
-
-    setProfile(prev => ({ ...prev, nickname: newNickname, last_nickname_change: now }));
-    setShowNicknameModal(false);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        nickname: newNickname,
+        last_nickname_change: serverTimestamp()
+      });
+      
+      // Immediately update local profile
+      setProfile(prev => ({ 
+        ...prev, 
+        nickname: newNickname,
+        last_nickname_change: now 
+      }));
+      
+      // Close nickname modal
+      setShowNicknameModal(false);
+      
+      console.log("✅ Nickname updated successfully:", newNickname);
+    } catch (error) {
+      console.error("❌ Nickname update error:", error);
+      throw new Error(`별명 변경 실패: ${error.message}`);
+    }
   };
 
   return (

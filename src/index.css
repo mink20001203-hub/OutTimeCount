@@ -39,27 +39,51 @@ body {
     content: "";
   }
   
+  /* Module glow effect */
+  .module-card {
+    @apply bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm;
+    box-shadow: 0 0 20px rgba(0, 255, 148, 0.05), inset 0 0 20px rgba(0, 255, 148, 0.02);
+    transition: box-shadow 0.3s ease;
+  }
+  .module-card:hover {
+    box-shadow: 0 0 30px rgba(0, 255, 148, 0.1), inset 0 0 20px rgba(0, 255, 148, 0.05);
+  }
+  
   /* Typography standardization for Noto Sans KR */
   * {
     -webkit-text-rendering: optimizeLegibility;
+    -moz-osx-font-smoothing: grayscale;
     -moz-text-rendering: optimizeLegibility;
     text-rendering: optimizeLegibility;
+    font-family: 'Noto Sans KR', 'Inter', 'Pretendard', system-ui, sans-serif;
   }
   
   /* Regular body text: font-weight 400 */
   p, span, button, label, input, textarea {
-    font-family: 'Noto Sans KR', 'Inter', 'Pretendard', system-ui, sans-serif;
     font-weight: 400;
   }
   
   /* Medium emphasis text: font-weight 500 */
-  .font-medium, .font-semibold, strong, b, .font-bold {
-    font-family: 'Noto Sans KR', 'Inter', 'Pretendard', system-ui, sans-serif;
+  .font-medium, .font-semibold, strong, b {
+    font-weight: 500;
+  }
+  .font-bold, .font-black {
+    font-weight: 700;
   }
   
   /* Monospace only for code/timer numbers */
   .font-mono, code, pre {
     font-family: 'JetBrains Mono', monospace;
+  }
+  
+  /* Loading animation */
+  @keyframes system-init {
+    0% { opacity: 0; }
+    50% { opacity: 1; }
+    100% { opacity: 0.5; }
+  }
+  .system-initializing {
+    animation: system-init 1.5s ease-in-out infinite;
   }
 }
 

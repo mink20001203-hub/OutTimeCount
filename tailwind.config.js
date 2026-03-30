@@ -1,4 +1,3 @@
-/** @type {import('tailwindcss').Config} */
 export default {
   content: [
     "./index.html",
@@ -10,8 +9,8 @@ export default {
       colors: {
         'sentinel-white': '#FFFFFF',
         'sentinel-bg': '#F8F9FA',
-        'sentinel-dark-bg': '#121212',
-        'sentinel-dark-card': '#1E1E1E',
+        'sentinel-dark-bg': '#0A0A0A',
+        'sentinel-dark-card': '#141414',
         'sentinel-green': '#00FF94',
         'sentinel-black': '#121212',
       },
@@ -28,7 +27,11 @@ export default {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.4' },
         }
-      }
+      },
+      boxShadow: {
+        'glow-green': '0 0 20px rgba(0, 255, 148, 0.15), inset 0 0 15px rgba(0, 255, 148, 0.05)',
+        'glow-green-lg': '0 0 30px rgba(0, 255, 148, 0.2), inset 0 0 20px rgba(0, 255, 148, 0.08)',
+      },
     },
   },
   plugins: [],

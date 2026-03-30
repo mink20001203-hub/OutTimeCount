@@ -94,17 +94,58 @@ const SuccessToast = ({ message, visible }) => {
   );
 };
 
-const ProfileModal = ({ isOpen, onClose }) => {
+const InitializingScreen = ({ visible }) => {
+  if (!visible) return null;
+  return (
+    <motion.div 
+      initial={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.6 }}
+      className="fixed inset-0 z-[500] bg-black flex items-center justify-center"
+    >
+      <div className="text-center space-y-8">
+        <div className="font-mono text-3xl md:text-4xl font-black tracking-[0.2em] text-sentinel-green animate-pulse italic uppercase">
+          <TypingText text="SYSTEM INITIALIZING..." speed={80} />
+        </div>
+        <div className="flex justify-center gap-2">
+          <motion.div
+            animate={{ y: [0, -10, 0] }}
+            transition={{ repeat: Infinity, duration: 0.8, delay: 0 }}
+            className="w-3 h-3 bg-sentinel-green rounded-full"
+          />
+          <motion.div
+            animate={{ y: [0, -10, 0] }}
+            transition={{ repeat: Infinity, duration: 0.8, delay: 0.2 }}
+            className="w-3 h-3 bg-sentinel-green rounded-full"
+          />
+          <motion.div
+            animate={{ y: [0, -10, 0] }}
+            transition={{ repeat: Infinity, duration: 0.8, delay: 0.4 }}
+            className="w-3 h-3 bg-sentinel-green rounded-full"
+          />
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+const ProfileModal = ({ isOpen, onClose, onSuccessCallback }) => {
   const { profile, updateNickname, logout } = useAuth();
   const [nickname, setNickname] = useState(profile?.nickname || '');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Sync profile changes to input
+  useEffect(() => {
+    if (profile?.nickname) {
+      setNickname(profile.nickname);
+    }
+  }, [profile?.nickname, isOpen]);
+
   const handleUpdateNickname = async () => {
     if (!nickname.trim()) {
       setError('별명을 입력해주세요.');
-      setIsSubmitting(false);
       return;
     }
     
@@ -112,12 +153,25 @@ const ProfileModal = ({ isOpen, onClose }) => {
     setSuccess('');
     setIsSubmitting(true);
     try {
+      console.log("🔄 Updating nickname to:", nickname.trim());
       await updateNickname(nickname.trim());
-      setSuccess('별명이 성공적으로 업데이트되었습니다');
+      console.log("✅ Nickname update successful");
+      
+      setSuccess('시스템 별명이 성공적으로 동기화되었습니다');
+      
+      // Trigger success toast in parent
+      if (onSuccessCallback) {
+        onSuccessCallback('시스템 별명이 성공적으로 동기화되었습니다');
+      }
+      
       setTimeout(() => setSuccess(''), 3000);
-      setTimeout(() => onClose(), 1500);
+      setTimeout(() => {
+        setIsSubmitting(false);
+        onClose();
+      }, 1500);
     } catch (err) {
-      setError(err.message);
+      console.error("❌ Nickname update error:", err.message);
+      setError(err.message || '별명 변경 중 오류가 발생했습니다.');
       setIsSubmitting(false);
     }
   };
@@ -189,7 +243,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
   );
 };
 
-const SponsorshipModal = ({ isOpen, onClose }) => {
+const SponsorshipModal = ({ isOpen, onClose, onDonationSuccess }) => {
   const [amount, setAmount] = useState(5000);
   const [destination, setDestination] = useState('UNICEF');
   const { user, profile } = useAuth();
@@ -221,19 +275,34 @@ const SponsorshipModal = ({ isOpen, onClose }) => {
   };
 
   const handleVirtualDonation = async () => {
-    if (!user || !profile) return;
+    if (!user) {
+      alert('로그인이 필요합니다. 상단의 Google로 접속 버튼을 눌러주세요.');
+      return;
+    }
+    
+    if (!profile?.nickname) {
+      alert('먼저 별명을 설정해주세요.');
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'donations'), {
         uid: user.uid,
-        nickname: profile.nickname || 'Anonymous',
+        nickname: profile.nickname,
+        photoURL: profile.photoURL || user.photoURL,
         amount: amount,
         to: destination,
         timestamp: serverTimestamp()
       });
-      alert('가상 기부가 완료되었습니다!');
-      setIsDonationOpen(true);
+      alert(`₩${amount.toLocaleString()} 가상 후원이 완료되었습니다!`);
+      onClose();
+      // Trigger donation success callback
+      if (onDonationSuccess) {
+        setTimeout(() => onDonationSuccess(), 500);
+      }
     } catch (error) {
       console.error('Virtual donation error:', error);
+      alert(`가상 후원 중 오류가 발생했습니다: ${error.message}`);
     }
   };
 
@@ -456,7 +525,7 @@ const LiveDot = () => (
   </div>
 );
 
-const TypingText = ({ text, className }) => {
+const TypingText = ({ text, className, speed = 100 }) => {
   const [displayedText, setDisplayedText] = useState('');
   useEffect(() => {
     let i = 0;
@@ -464,9 +533,9 @@ const TypingText = ({ text, className }) => {
       setDisplayedText(text.substring(0, i));
       i++;
       if (i > text.length) clearInterval(interval);
-    }, 100);
+    }, speed);
     return () => clearInterval(interval);
-  }, [text]);
+  }, [text, speed]);
   return <span className={className}>{displayedText}</span>;
 };
 
@@ -519,7 +588,7 @@ const MinigameHub = () => {
         <div 
           key={i} 
           onClick={() => handleSimulateWin(game)}
-          className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/10 p-5 rounded-3xl hover:border-sentinel-green/30 transition-all group cursor-pointer relative overflow-hidden shadow-sm active:scale-95 text-left"
+          className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/10 p-5 rounded-3xl hover:border-sentinel-green/30 transition-all group cursor-pointer relative overflow-hidden shadow-glow-green dark:shadow-glow-green-lg active:scale-95 text-left"
         >
           <div className="absolute top-0 right-0 p-3 opacity-20 font-mono text-[10px] uppercase tracking-widest font-black shadow-sm text-right">v1.0</div>
           <div className="text-2xl mb-3 group-hover:scale-110 transition-transform inline-block shadow-sm"> {game.icon}</div>
@@ -533,6 +602,29 @@ const MinigameHub = () => {
       ))}
     </div>
   );
+};
+
+// Mock competitor data generator
+const generateMockCompetitors = () => {
+  const koreanFirstNames = ['김', '이', '박', '최', '정', '강', '조', '윤'];
+  const koreanLastNames = ['민준', '지윤', '준호', '민지', '수진', '성호', '동욱', '준영'];
+  const adjectives = ['빠른', '강한', '용감한', '영리한', '민첩한', '대담한', '재빠른', '똑똑한'];
+  const nouns = ['사수', '검사', '전사', '수호자', '파수꾼', '수사관', '요원', '기사'];
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2'];
+  
+  const mockData = [];
+  for (let i = 0; i < 6; i++) {
+    const baseTime = Math.random() * 86400000; // 0 to 24 hours in ms
+    const variance = Math.random() * 7200000; // 0 to 2 hours variance
+    mockData.push({
+      id: `mock_${i}`,
+      nickname: `${koreanFirstNames[Math.floor(Math.random() * 8)]}${koreanLastNames[Math.floor(Math.random() * 8)]}`,
+      photoURL: `https://i.pravatar.cc/32?img=${Math.floor(Math.random() * 70) + 1}`,
+      survival_time: baseTime + variance,
+      status: Math.random() > 0.3 ? 'ONLINE' : 'OFFLINE'
+    });
+  }
+  return mockData.sort((a, b) => b.survival_time - a.survival_time);
 };
 
 const ShortcutGuide = ({ isOpen, onClose }) => {
@@ -629,12 +721,28 @@ const LeaderboardTable = ({ onRankUpdate }) => {
   const { user } = useAuth();
   const [competitors, setCompetitors] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [useMockData, setUseMockData] = useState(false);
+  const mockDataRef = useRef(null);
 
   useEffect(() => {
     const q = query(collection(db, 'users'), orderBy('survival_time', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setCompetitors(data.slice(0, 10));
+      
+      // Use mock data only if actual competitors are empty
+      if (data.length === 0) {
+        // Generate mock data only once
+        if (!mockDataRef.current) {
+          mockDataRef.current = generateMockCompetitors();
+        }
+        setCompetitors(mockDataRef.current);
+        setUseMockData(true);
+      } else {
+        // If real data exists, stop using mock data
+        mockDataRef.current = null;
+        setCompetitors(data.slice(0, 10));
+        setUseMockData(false);
+      }
       
       if (user) {
         const index = data.findIndex(u => u.id === user.uid);
@@ -649,14 +757,21 @@ const LeaderboardTable = ({ onRankUpdate }) => {
   }, [user, onRankUpdate]);
 
   return (
-    <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-sm h-full font-sans text-left">
+    <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg h-full font-sans text-left">
+      {useMockData && (
+        <div className="bg-sentinel-green/10 border-b border-sentinel-green/20 px-8 py-3">
+          <p className="text-xs font-mono text-sentinel-green font-black uppercase tracking-widest italic">
+            📡 DEMO MODE - SIMULATED LEADERBOARD
+          </p>
+        </div>
+      )}
       <table className="w-full text-left border-collapse shadow-sm">
         <thead>
           <tr className="bg-sentinel-green/5 border-b border-sentinel-green/10 shadow-sm">
-            <th className="px-8 py-5 font-mono text-xs uppercase tracking-widest text-sentinel-green/60 font-black italic shadow-sm text-left">순위</th>
-            <th className="px-8 py-5 font-mono text-xs uppercase tracking-widest text-sentinel-green/60 font-black italic text-left shadow-sm">운영자</th>
-            <th className="px-8 py-5 font-mono text-xs uppercase tracking-widest text-sentinel-green/60 text-center font-black italic shadow-sm">상태</th>
-            <th className="px-8 py-5 font-mono text-xs uppercase tracking-widest text-sentinel-green/60 text-right font-black italic shadow-sm">생존 시간</th>
+            <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 font-black italic shadow-sm text-left">순위</th>
+            <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 font-black italic text-left shadow-sm">운영자</th>
+            <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 text-center font-black italic shadow-sm">상태</th>
+            <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 text-right font-black italic shadow-sm">생존시간</th>
           </tr>
         </thead>
         <tbody className="relative min-h-[400px] text-left">
@@ -678,30 +793,30 @@ const LeaderboardTable = ({ onRankUpdate }) => {
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
                     className={`border-b border-sentinel-green/5 group transition-colors hover:bg-sentinel-green/5 dark:hover:bg-sentinel-green/10 shadow-sm ${isMe ? 'ring-1 ring-inset ring-sentinel-green/20 shadow-[0_0_15px_rgba(0,255,148,0.05)]' : ''} shadow-sm`}
                   >
-                    <td className="px-8 py-6 font-mono font-black text-2xl text-sentinel-green flex items-center gap-2 tracking-tighter shadow-sm text-left">
-                      {index === 0 ? <span className="text-2xl drop-shadow-lg shadow-sm">🥇</span> : `#${String(index + 1).padStart(2, '0')}`}
+                    <td className="px-4 py-4 font-mono font-black text-lg text-sentinel-green flex items-center gap-2 tracking-tighter shadow-sm text-left">
+                      {index === 0 ? <span className="text-xl drop-shadow-lg shadow-sm">🥇</span> : `#${String(index + 1).padStart(2, '0')}`}
                     </td>
-                    <td className="px-8 py-6 shadow-sm">
-                      <div className="flex items-center gap-4 text-left shadow-sm">
-                        <img src={comp.photoURL || 'https://via.placeholder.com/32'} className="w-8 h-8 rounded-full border border-sentinel-green/10 shadow-sm shadow-xl shadow-sm" />
+                    <td className="px-4 py-4 shadow-sm">
+                      <div className="flex items-center gap-3 text-left shadow-sm">
+                        <img src={comp.photoURL || 'https://via.placeholder.com/32'} className="w-7 h-7 rounded-full border border-sentinel-green/10 shadow-sm shadow-xl shadow-sm" />
                         <div className="text-left">
-                          <div className={`font-sans font-bold text-base leading-none mb-1 text-left shadow-sm ${isMe ? 'text-sentinel-green font-black' : 'text-black dark:text-white'}`}>
+                          <div className={`font-sans font-bold text-sm leading-none mb-0.5 text-left shadow-sm ${isMe ? 'text-sentinel-green font-black' : 'text-black dark:text-white'}`}>
                             {comp.nickname || 'Unknown'}
-                            {isMe && <span className="ml-2 text-[10px] bg-sentinel-green/20 px-1.5 py-0.5 rounded uppercase tracking-tighter font-black font-sans shadow-sm">You</span>}
+                            {isMe && <span className="ml-2 text-[9px] bg-sentinel-green/20 px-1.5 py-0.5 rounded uppercase tracking-tighter font-black font-sans shadow-sm">You</span>}
                           </div>
-                          <div className="font-mono text-[8px] text-gray-400 uppercase tracking-widest font-black opacity-60 text-left shadow-sm">{comp.id.substring(0, 10)}</div>
+                          <div className="font-mono text-[7px] text-gray-400 uppercase tracking-widest font-black opacity-60 text-left shadow-sm">{comp.id.substring(0, 8)}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-8 py-6 text-center shadow-sm text-center">
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest font-headline shadow-sm shadow-xl ${
+                    <td className="px-4 py-4 text-center shadow-sm text-center">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest font-headline shadow-sm shadow-xl ${
                         comp.status === 'ONLINE' ? 'bg-sentinel-green/10 text-sentinel-green shadow-[0_0_10px_rgba(0,255,148,0.1)] shadow-sm' : 'bg-gray-100 dark:bg-white/5 text-gray-400 opacity-50 shadow-sm'
                       }`}>
                         <span className={`w-1 h-1 rounded-full ${comp.status === 'ONLINE' ? 'bg-sentinel-green animate-pulse shadow-[0_0_5px_rgba(0,255,148,0.8)] shadow-sm' : 'bg-gray-400 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm'}`}></span>
                         {comp.status === 'ONLINE' ? '실시간' : '오프라인'}
                       </span>
                     </td>
-                    <td className={`px-8 py-6 text-right font-mono font-bold text-base tracking-widest italic shadow-sm text-right ${isMe ? 'text-sentinel-green scale-110 drop-shadow-[0_0_8px_rgba(0,255,148,0.4)] shadow-sm' : 'text-black dark:text-white shadow-sm'}`}>
+                    <td className={`px-4 py-4 text-right font-mono font-bold text-sm tracking-widest italic shadow-sm text-right ${isMe ? 'text-sentinel-green drop-shadow-[0_0_8px_rgba(0,255,148,0.4)] shadow-sm' : 'text-black dark:text-white shadow-sm'}`}>
                       {formatTime(comp.survival_time || 0)}
                     </td>
                   </motion.tr>
@@ -755,7 +870,7 @@ const Chat = () => {
   };
 
   return (
-    <aside className="w-full lg:w-80 flex flex-col bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden h-full backdrop-blur-sm shadow-sm font-sans text-left shadow-xl">
+    <aside className="w-full lg:w-80 flex flex-col bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden h-full backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg font-sans text-left">
       <div className="p-6 border-b border-sentinel-green/10 bg-sentinel-green/5 flex items-center justify-between shadow-sm shadow-xl shadow-sm">
         <h3 className="font-mono font-black text-xs tracking-tighter flex items-center gap-2 uppercase italic text-sentinel-green font-headline tracking-tight text-left">
           라이브 채널
@@ -817,6 +932,16 @@ function App() {
   const [competitorStats, setCompetitorStats] = useState({ count: 0, myRank: 'PENDING...' });
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [showInitializing, setShowInitializing] = useState(false);
+
+  // Show SYSTEM INITIALIZING only on first load when nickname modal appears
+  useEffect(() => {
+    if (showNicknameModal && !showInitializing) {
+      setShowInitializing(true);
+      const timer = setTimeout(() => setShowInitializing(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [showNicknameModal]);
 
   useEffect(() => {
     if (user) {
@@ -901,6 +1026,7 @@ function App() {
   return (
     <div className="min-h-screen bg-white dark:bg-sentinel-dark-bg text-black dark:text-white selection:bg-sentinel-green selection:text-black antialiased transition-colors duration-500 font-sans text-left overflow-x-hidden shadow-sm">
       <WelcomeSplash user={user} visible={showSplash} />
+      <InitializingScreen visible={showInitializing && showNicknameModal} />
       
       {(!isActive || isTerminated) && (
         <div className="fixed inset-0 z-[200] bg-white/95 dark:bg-black/95 backdrop-blur-xl flex items-center justify-center p-6 text-center shadow-2xl shadow-xl">
@@ -966,13 +1092,18 @@ function App() {
       </header>
 
       {user ? (
-        <div className="max-w-7xl mx-auto px-4 pt-24 pb-12 grid grid-cols-1 lg:grid-cols-12 gap-8 min-h-screen text-left text-left text-left text-left shadow-sm">
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.8, delay: !showNicknameModal ? 0.3 : 0 }}
+          className="max-w-7xl mx-auto px-4 pt-24 pb-12 grid grid-cols-1 lg:grid-cols-12 gap-8 min-h-screen text-left text-left text-left text-left shadow-sm"
+        >
           {/* Left Column */}
           <div className="lg:col-span-8 space-y-8 text-left text-left shadow-sm">
             {/* Modules Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left text-left text-left text-left shadow-sm shadow-sm">
               {/* Module 1: Status */}
-              <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm relative overflow-hidden group shadow-sm transition-all hover:shadow-sentinel-green/5 text-left font-sans shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm text-left shadow-xl shadow-xl">
+              <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm relative overflow-hidden group shadow-glow-green dark:shadow-glow-green-lg transition-all hover:shadow-glow-green/50 text-left font-sans text-left">
                 <div className="flex justify-between items-start mb-6 text-left shadow-sm">
                   <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm">Module_01: 시스템_상태</h3>
                   <LiveDot />
@@ -1002,39 +1133,30 @@ function App() {
               </div>
 
               {/* Module 2: Survival Timer */}
-              <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm relative shadow-sm hover:shadow-sentinel-green/5 transition-all text-left shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm text-left shadow-xl shadow-xl shadow-xl overflow-hidden">
+              <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm relative shadow-glow-green dark:shadow-glow-green-lg transition-all text-left overflow-hidden">
                 <div className="flex justify-between items-start mb-6 font-sans text-left text-left text-left shadow-sm">
                   <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm shadow-sm shadow-sm">Module_02: 생존_카운트</h3>
                   <LiveDot />
                 </div>
-                <div className="flex flex-col justify-center py-2 text-left text-left text-left shadow-sm shadow-sm overflow-visible">
+                <div className="flex flex-col justify-center items-center py-2 text-center text-center text-center shadow-sm shadow-sm overflow-visible">
                   <p 
-                    className={`font-mono font-black tracking-[0.2em] glow-green drop-shadow-2xl italic transition-all duration-300 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm whitespace-nowrap ${bonusPulse ? 'text-white scale-110 shadow-[0_0_30px_rgba(0,255,148,0.6)] shadow-xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm' : 'text-sentinel-green shadow-sm shadow-sm'}`}
-                    style={{fontSize: 'clamp(2.5rem, 8vw, 4rem)'}}
+                    className={`font-mono font-black tracking-wider glow-green drop-shadow-2xl italic transition-all duration-300 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm whitespace-nowrap ${bonusPulse ? 'text-white scale-110 shadow-[0_0_30px_rgba(0,255,148,0.6)] shadow-xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm' : 'text-sentinel-green shadow-sm shadow-sm'}`}
+                    style={{fontSize: 'clamp(1.8rem, 6.5vw, 3rem)', letterSpacing: '-0.02em'}}
                   >
                     {formatTime(survivalTime)}
                   </p>
-                  <p className="font-sans font-medium text-sm text-gray-400 dark:text-gray-500 mt-4 uppercase tracking-[0.2em] opacity-60 shadow-sm shadow-sm shadow-sm text-left shadow-sm shadow-sm leading-tight">10초마다 데이터 클라우드 동기화 중...</p>
+                  <p className="font-sans font-medium text-sm text-gray-400 dark:text-gray-500 mt-4 uppercase tracking-[0.15em] opacity-60 shadow-sm shadow-sm shadow-sm text-center shadow-sm shadow-sm leading-tight">10초마다 데이터 클라우드 동기화 중...</p>
                 </div>
               </div>
             </div>
 
-            {/* Module 3: Hall of Fame & Leaderboard (Swapped) */}
+            {/* Module 3: Live Leaderboard */}
             <div className="space-y-4 text-left font-sans text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm">
               <div className="flex items-center justify-between px-4 font-sans font-black font-sans font-black font-sans font-black font-sans font-black shadow-sm shadow-sm shadow-sm shadow-sm">
                 <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm shadow-sm shadow-sm">Module_03: 실시간_데이터_센터</h3>
                 <span className="font-mono text-[9px] text-sentinel-green/60 uppercase italic tracking-widest font-headline italic italic italic italic italic italic shadow-sm shadow-sm shadow-sm text-right shadow-sm shadow-sm shadow-sm shadow-sm">NETWORK_ACTIVE</span>
               </div>
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm">
-                <div className="space-y-4 order-2 xl:order-1 h-full shadow-lg shadow-lg shadow-lg shadow-lg shadow-lg shadow-lg shadow-lg shadow-sm shadow-sm text-left shadow-sm shadow-sm">
-                  <p className="font-mono text-[8px] text-gray-500 uppercase px-2 tracking-widest font-black font-headline opacity-60 text-left text-left text-left shadow-sm shadow-sm shadow-sm text-left shadow-sm">Patron_Hall_of_Fame</p>
-                  <HallOfFame />
-                </div>
-                <div className="space-y-4 order-1 xl:order-2 h-full shadow-lg shadow-lg shadow-lg shadow-lg shadow-lg shadow-lg shadow-lg shadow-sm shadow-sm text-left shadow-sm shadow-sm">
-                  <p className="font-mono text-[8px] text-gray-500 uppercase px-2 tracking-widest font-black font-headline opacity-60 text-left text-left text-left shadow-sm shadow-sm shadow-sm text-left shadow-sm">Live_Survival_Rank</p>
-                  <LeaderboardTable onRankUpdate={handleRankUpdate} />
-                </div>
-              </div>
+              <LeaderboardTable onRankUpdate={handleRankUpdate} />
             </div>
 
             {/* Minigame Hub */}
@@ -1054,7 +1176,7 @@ function App() {
             </div>
             <Chat />
           </div>
-        </div>
+        </motion.div>
       ) : (
         <div className="min-h-screen flex items-center justify-center p-6 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-sentinel-green/10 dark:from-sentinel-green/5 via-transparent to-transparent relative font-sans text-center overflow-x-hidden text-center text-center text-center text-center text-center text-center text-center shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-sm shadow-sm shadow-sm shadow-sm">
           <div className="max-w-md w-full bg-white dark:bg-sentinel-dark-card border border-gray-100 dark:border-sentinel-green/10 rounded-[48px] shadow-2xl p-12 text-center relative overflow-hidden shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm shadow-sm">
@@ -1079,9 +1201,20 @@ function App() {
       {isAdmin && <AdminTerminal isOpen={isTerminalOpen} onClose={() => setIsTerminalOpen(false)} />}
       <ShortcutGuide isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
       <DonationModal isOpen={isDonationOpen} onClose={() => setIsDonationOpen(false)} />
-      <SponsorshipModal isOpen={isSponsorshipOpen} onClose={() => setIsSponsorshipOpen(false)} />
+      <SponsorshipModal 
+        isOpen={isSponsorshipOpen} 
+        onClose={() => setIsSponsorshipOpen(false)}
+        onDonationSuccess={() => setIsDonationOpen(true)}
+      />
       <UpdateNoteModal isOpen={isUpdateNoteOpen} onClose={() => setIsUpdateNoteOpen(false)} />
-      <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
+      <ProfileModal 
+        isOpen={isProfileOpen} 
+        onClose={() => setIsProfileOpen(false)}
+        onSuccessCallback={(msg) => {
+          setSuccessMessage(msg);
+          setTimeout(() => setSuccessMessage(''), 3000);
+        }}
+      />
       <BonusToast pulse={bonusPulse} />
       <SuccessToast message={successMessage} visible={!!successMessage} />
     </div>
