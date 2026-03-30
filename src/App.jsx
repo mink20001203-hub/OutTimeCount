@@ -1,15 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { useTimer } from './context/TimerContext';
 import { useAuth } from './context/AuthContext';
 import { db } from './firebase';
 import { 
   collection, query, orderBy, limit, onSnapshot, 
-  addDoc, serverTimestamp, getCountFromServer
+  addDoc, serverTimestamp, getCountFromServer, where
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminTerminal from './context/AdminTerminal';
 
 import { loadTossPayments } from '@tosspayments/payment-sdk';
+
+const DEMO_PATRONS = [
+  { id: 'demo_patron_admin', nickname: 'Admin', amount: 500000, to: 'UNICEF', badge: 'FOUNDING' },
+  { id: 'demo_patron_fan', nickname: 'AhnYujinFan', amount: 300000, to: 'WWF', badge: 'VIP' },
+  { id: 'demo_patron_operator', nickname: 'NightShiftObserver', amount: 150000, to: 'DOCTORS', badge: 'CORE' },
+];
 
 // --- Components ---
 
@@ -23,10 +29,10 @@ const WelcomeSplash = ({ user, visible }) => {
       className="fixed top-24 left-6 z-[100] max-w-sm pointer-events-none"
     >
       <div className="bg-black/90 dark:bg-sentinel-green dark:text-black text-sentinel-green p-6 rounded-[32px] shadow-2xl border border-sentinel-green/20 backdrop-blur-xl">
-        <h2 className="font-mono font-black text-xl mb-2 italic uppercase tracking-tight">Welcome, Operator</h2>
+        <h2 className="font-mono font-black text-xl mb-2 italic uppercase tracking-tight">환영합니다, 운영자님</h2>
         <p className="font-sans text-xs leading-relaxed font-bold opacity-90">
           디지털 센티널 시스템에 접속하신 것을 환영합니다.<br/>
-          당신의 생존은 곧 실질적인 사회적 기여가 됩니다.
+          당신의 생존 기록은 곧 발표용 시스템의 핵심 지표가 됩니다.
         </p>
         <div className="mt-4 flex gap-1">
           <div className="w-8 h-1 bg-current rounded-full animate-pulse"></div>
@@ -41,10 +47,10 @@ const WelcomeSplash = ({ user, visible }) => {
 const UpdateNoteModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
   const updates = [
-    { category: '보안', title: '다중 탭 감지 시스템(Rule 03) 도입', desc: '공정한 경쟁을 위해 단 하나의 활성 세션만 허용됩니다.' },
-    { category: '기능', title: '미니게임 점수 연동 강화', desc: '메모리 핵, 그리드 런 등 미니게임 점수가 생존 시간으로 자동 합산됩니다.' },
-    { category: 'UI/UX', title: '레이아웃 및 가독성 최적화', desc: '명예의 전당 재배치 및 Noto Sans KR 폰트 적용으로 사용성을 높였습니다.' },
-    { category: '기부', title: '토스 결제 및 자동 증서 발급', desc: '후원금의 50%가 자동 기부되며 실시간 증서 조회가 가능합니다.' },
+    { category: 'SECURITY', title: 'Rule 03 session detection', desc: 'Only one active tab can own the timer at a time.' },
+    { category: 'FEATURE', title: 'Minigame bonus sync', desc: 'Bonus time now lands in the survival timer immediately.' },
+    { category: 'UI/UX', title: 'Layout and typography pass', desc: 'Live channel, donation surfaces, and Noto Sans KR alignment were refined.' },
+    { category: 'PAYMENT', title: 'Donation certificate refresh', desc: 'Total donation and the 50 percent shared donation copy are now presentation-ready.' },
   ];
 
   return (
@@ -56,7 +62,7 @@ const UpdateNoteModal = ({ isOpen, onClose }) => {
         onClick={e => e.stopPropagation()}
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/30 shadow-sm"></div>
-        <h2 className="text-2xl font-mono font-black mb-2 uppercase italic text-sentinel-green font-headline italic tracking-tight">System_Update_Note</h2>
+        <h2 className="text-2xl font-mono font-black mb-2 uppercase italic text-sentinel-green font-headline italic tracking-tight">시스템 업데이트 노트</h2>
         <p className="text-gray-400 text-[10px] font-mono mb-8 uppercase tracking-[0.2em] font-black">Sentinel-OS Version 2.4.0</p>
         
         <div className="space-y-6">
@@ -71,7 +77,7 @@ const UpdateNoteModal = ({ isOpen, onClose }) => {
           ))}
         </div>
 
-        <button onClick={onClose} className="mt-10 w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-mono font-bold text-xs uppercase tracking-widest rounded-2xl hover:bg-sentinel-green hover:text-black transition-all shadow-xl font-headline">프로토콜 확인</button>
+        <button onClick={onClose} className="mt-10 w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-mono font-bold text-xs uppercase tracking-widest rounded-2xl hover:bg-sentinel-green hover:text-black transition-all shadow-xl font-headline">업데이트 확인</button>
       </motion.div>
     </div>
   );
@@ -87,7 +93,7 @@ const SuccessToast = ({ message, visible }) => {
       className="fixed top-24 right-6 z-[600]"
     >
       <div className="bg-sentinel-green text-black px-6 py-3 rounded-2xl shadow-[0_0_30px_rgba(0,255,148,0.4)] flex items-center gap-3 border border-white/20">
-        <span className="text-lg">✓</span>
+        <span className="text-lg">OK</span>
         <span className="font-sans font-bold text-sm">{message}</span>
       </div>
     </motion.div>
@@ -135,114 +141,100 @@ const ProfileModal = ({ isOpen, onClose, onSuccessCallback }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Sync profile changes to input
   useEffect(() => {
     if (profile?.nickname) {
       setNickname(profile.nickname);
     }
   }, [profile?.nickname, isOpen]);
-
   const handleUpdateNickname = async () => {
-    if (!nickname.trim()) {
+    const nextNickname = nickname.trim();
+    if (!nextNickname) {
       setError('별명을 입력해주세요.');
       return;
     }
-    
     setError('');
     setSuccess('');
     setIsSubmitting(true);
     try {
-      console.log("🔄 Updating nickname to:", nickname.trim());
-      await updateNickname(nickname.trim());
-      console.log("✅ Nickname update successful");
-      
-      setSuccess('시스템 별명이 성공적으로 동기화되었습니다');
-      
-      // Trigger success toast in parent
-      if (onSuccessCallback) {
-        onSuccessCallback('시스템 별명이 성공적으로 동기화되었습니다');
-      }
-      
-      setTimeout(() => setSuccess(''), 3000);
+      const updatedNickname = await updateNickname(nextNickname);
+      const successText = '별명이 즉시 동기화되었습니다.';
+      setNickname(updatedNickname || nextNickname);
+      setSuccess(successText);
+      onSuccessCallback?.(successText);
+      setIsSubmitting(false);
       setTimeout(() => {
-        setIsSubmitting(false);
+        setSuccess('');
         onClose();
-      }, 1500);
+      }, 500);
     } catch (err) {
-      console.error("❌ Nickname update error:", err.message);
-      setError(err.message || '별명 변경 중 오류가 발생했습니다.');
+      setError(err.message || '별명 변경에 실패했습니다.');
       setIsSubmitting(false);
     }
   };
-
   const handleLogout = () => {
     logout();
     onClose();
   };
-
   if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 font-sans" onClick={onClose}>
-      <motion.div 
+      <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="max-w-md w-full bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl overflow-hidden relative"
+        className="max-w-md w-full max-h-[90vh] overflow-y-auto bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl overflow-hidden relative"
         onClick={e => e.stopPropagation()}
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/30 shadow-sm"></div>
         <h2 className="text-xl font-mono font-black mb-2 uppercase italic text-sentinel-green font-headline tracking-tight">Profile_Settings</h2>
         <p className="text-gray-400 text-[10px] font-sans mb-6 uppercase tracking-[0.2em] font-black">운영자 프로필 관리</p>
-        
         <div className="space-y-6">
           <div className="space-y-3">
-            <label className="block text-base font-semibold mb-3 text-black dark:text-white font-sans">별명 변경</label>
-            <input 
-              type="text" 
+            <label className="block text-base font-semibold mb-3 text-black dark:text-white font-sans">별명</label>
+            <input
+              type="text"
               value={nickname}
               onChange={e => setNickname(e.target.value)}
-              maxLength="12"
+              maxLength="40"
               className="w-full px-4 py-4 bg-black/5 dark:bg-black/40 border border-sentinel-green/10 rounded-xl text-black dark:text-white placeholder:text-gray-400 font-sans text-base font-medium focus:ring-1 focus:ring-sentinel-green/50 outline-none transition-all"
-              placeholder="새 별명 (2~12자)"
+              placeholder="별명 (2~12자)"
               disabled={isSubmitting}
             />
-            <p className="text-sm font-medium text-gray-500 mt-2 font-sans">한글/영문/숫자/_, 2~12자</p>
+            <p className="text-sm font-medium text-gray-500 mt-2 font-sans">이모지/특수문자 포함 2~12자</p>
             {error && (
               <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
                 <p className="text-red-500 text-sm font-semibold font-sans">{error}</p>
               </div>
             )}
-            <button 
-              onClick={handleUpdateNickname} 
+            {success && (
+              <div className="p-3 bg-sentinel-green/10 border border-sentinel-green/20 rounded-lg">
+                <p className="text-sentinel-green text-sm font-semibold font-sans">{success}</p>
+              </div>
+            )}
+            <button
+              onClick={handleUpdateNickname}
               disabled={isSubmitting}
-              className="mt-4 w-full py-4 bg-sentinel-green text-black font-mono font-black text-base uppercase tracking-widest rounded-xl hover:opacity-90 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="mt-4 w-full py-4 bg-sentinel-green text-black font-sans font-bold text-base rounded-xl hover:opacity-90 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? '업데이트 중...' : '별명 변경'}
             </button>
           </div>
-          
           <div className="relative py-3">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10"></div></div>
             <div className="relative flex justify-center text-[10px] uppercase font-mono text-gray-500 bg-white dark:bg-[#0A0A0A] px-2">or</div>
           </div>
-          
-          <button 
-            onClick={handleLogout} 
-            className="w-full py-4 bg-red-500/10 border border-red-500/20 text-red-500 font-mono font-bold text-sm uppercase tracking-widest rounded-xl hover:bg-red-500/20 transition-all"
+          <button
+            onClick={handleLogout}
+            className="w-full py-4 bg-red-500/10 border border-red-500/20 text-red-500 font-sans font-bold text-sm uppercase tracking-widest rounded-xl hover:bg-red-500/20 transition-all"
           >
             로그아웃
           </button>
         </div>
-        
-        <button onClick={onClose} className="mt-6 w-full py-3 text-gray-500 font-sans font-bold text-xs uppercase tracking-widest hover:text-white transition-colors text-center">취소</button>
+        <button onClick={onClose} className="mt-6 w-full py-3 text-gray-500 font-sans font-bold text-xs uppercase tracking-widest hover:text-white transition-colors text-center">닫기</button>
       </motion.div>
-      
       <SuccessToast message={success} visible={!!success} />
     </div>
   );
 };
-
 const SponsorshipModal = ({ isOpen, onClose, onDonationSuccess }) => {
   const [amount, setAmount] = useState(5000);
   const [destination, setDestination] = useState('UNICEF');
@@ -251,9 +243,9 @@ const SponsorshipModal = ({ isOpen, onClose, onDonationSuccess }) => {
   if (!isOpen) return null;
 
   const destinations = [
-    { id: 'UNICEF', name: '유니세프 (아동 구호)', icon: '💙' },
-    { id: 'WWF', name: 'WWF (자연 보호)', icon: '🐼' },
-    { id: 'DOCTORS', name: '국경없는의사회 (의료)', icon: '🏥' },
+    { id: 'UNICEF', name: '유니세프 (아동 구호)', icon: 'U' },
+    { id: 'WWF', name: 'WWF (환경 보호)', icon: 'W' },
+    { id: 'DOCTORS', name: '국경없는의사회 (의료)', icon: 'D' },
   ];
 
   const handleTossPayment = async () => {
@@ -264,7 +256,7 @@ const SponsorshipModal = ({ isOpen, onClose, onDonationSuccess }) => {
       await tossPayments.requestPayment('카드', {
         amount: amount,
         orderId: `don_${Math.random().toString(36).substring(2, 11)}`,
-        orderName: 'Digital Sentinel 시스템 후원',
+        orderName: '디지털 센티널 시스템 후원',
         customerName: profile?.nickname || 'Guest',
         successUrl: `${window.location.origin}?payment=success&amount=${amount}&to=${destination}`,
         failUrl: `${window.location.origin}?payment=fail`,
@@ -276,7 +268,7 @@ const SponsorshipModal = ({ isOpen, onClose, onDonationSuccess }) => {
 
   const handleVirtualDonation = async () => {
     if (!user) {
-      alert('로그인이 필요합니다. 상단의 Google로 접속 버튼을 눌러주세요.');
+      alert('로그인이 필요합니다. 상단의 Google 로그인 버튼을 눌러주세요.');
       return;
     }
     
@@ -294,12 +286,8 @@ const SponsorshipModal = ({ isOpen, onClose, onDonationSuccess }) => {
         to: destination,
         timestamp: serverTimestamp()
       });
-      alert(`₩${amount.toLocaleString()} 가상 후원이 완료되었습니다!`);
       onClose();
-      // Trigger donation success callback
-      if (onDonationSuccess) {
-        setTimeout(() => onDonationSuccess(), 500);
-      }
+      onDonationSuccess?.();
     } catch (error) {
       console.error('Virtual donation error:', error);
       alert(`가상 후원 중 오류가 발생했습니다: ${error.message}`);
@@ -311,7 +299,7 @@ const SponsorshipModal = ({ isOpen, onClose, onDonationSuccess }) => {
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="max-w-md w-full bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl overflow-hidden relative"
+        className="max-w-md w-full max-h-[90vh] overflow-y-auto bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl overflow-hidden relative"
         onClick={e => e.stopPropagation()}
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/30"></div>
@@ -320,7 +308,7 @@ const SponsorshipModal = ({ isOpen, onClose, onDonationSuccess }) => {
         
         <div className="space-y-6">
           <div className="space-y-3">
-            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest px-1">Amount_Selection</p>
+            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest px-1">후원 금액 선택</p>
             <div className="grid grid-cols-3 gap-3">
               {[5000, 10000, 20000].map(amt => (
                 <button 
@@ -330,14 +318,14 @@ const SponsorshipModal = ({ isOpen, onClose, onDonationSuccess }) => {
                     amount === amt ? 'bg-sentinel-green text-black border-sentinel-green shadow-[0_0_15px_rgba(0,255,148,0.3)]' : 'bg-transparent text-gray-500 border-white/10 hover:border-sentinel-green/50'
                   }`}
                 >
-                  ₩{amt.toLocaleString()}
+                  KRW {amt.toLocaleString()}
                 </button>
               ))}
             </div>
           </div>
 
           <div className="space-y-3">
-            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest px-1">Donation_Destination</p>
+            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest px-1">기부 대상 선택</p>
             <div className="space-y-2">
               {destinations.map(dest => (
                 <button
@@ -359,14 +347,14 @@ const SponsorshipModal = ({ isOpen, onClose, onDonationSuccess }) => {
             onClick={handleTossPayment}
             className="w-full py-4 bg-[#0064FF] text-white font-mono font-black text-sm uppercase tracking-widest rounded-2xl hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg"
           >
-            <span className="text-lg">💳</span> 토스 페이먼츠 결제
+            <span className="text-lg">TP</span> 토스페이 결제
           </button>
 
           <button 
             onClick={handleVirtualDonation}
             className="w-full py-4 bg-sentinel-green text-black font-mono font-black text-sm uppercase tracking-widest rounded-2xl hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg"
           >
-            <span className="text-lg">🧪</span> 가상 후원 테스트
+            <span className="text-lg">SIM</span> 가상 후원 테스트
           </button>
 
           <div className="relative py-2">
@@ -380,11 +368,11 @@ const SponsorshipModal = ({ isOpen, onClose, onDonationSuccess }) => {
             rel="noopener noreferrer"
             className="w-full py-4 bg-[#FFDD00] text-black font-mono font-black text-sm uppercase tracking-widest rounded-2xl hover:opacity-90 transition-all flex items-center justify-center gap-2 font-sans shadow-lg font-bold"
           >
-            <span className="text-lg">☕</span> Buy Me a Coffee
+            <span className="text-lg">COF</span> Buy Me a Coffee
           </a>
         </div>
 
-        <button onClick={onClose} className="mt-6 w-full py-3 text-gray-500 font-sans font-bold text-[10px] uppercase tracking-widest hover:text-white transition-colors text-center">취소</button>
+        <button onClick={onClose} className="mt-6 w-full py-3 text-gray-500 font-sans font-bold text-[10px] uppercase tracking-widest hover:text-white transition-colors text-center">닫기</button>
       </motion.div>
     </div>
   );
@@ -407,59 +395,124 @@ const BonusToast = ({ pulse }) => {
     >
       <div className="bg-sentinel-green text-black px-6 py-3 rounded-2xl shadow-[0_0_30px_rgba(0,255,148,0.4)] flex items-center gap-3 border border-white/20">
         <span className="font-mono font-black text-lg">{formatBonus(pulse.amount)}</span>
-        <span className="font-sans font-bold text-xs uppercase tracking-tighter">보너스 생존 시간 획득!</span>
+        <span className="font-sans font-bold text-xs uppercase tracking-tighter">보너스 생존 시간 획득</span>
       </div>
     </motion.div>
   );
 };
 
 const HallOfFame = () => {
+  const { user } = useAuth();
   const [patrons, setPatrons] = useState([]);
+  const [isPatron, setIsPatron] = useState(false);
 
   useEffect(() => {
+    if (!user?.uid) {
+      setIsPatron(false);
+      return;
+    }
+
+    const eligibilityQuery = query(
+      collection(db, 'donations'),
+      where('uid', '==', user.uid),
+      limit(1)
+    );
+
+    const unsubscribe = onSnapshot(eligibilityQuery, (snapshot) => {
+      setIsPatron(!snapshot.empty);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!isPatron) {
+      setPatrons([]);
+      return;
+    }
+
     const q = query(collection(db, 'donations'), orderBy('amount', 'desc'), limit(5));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setPatrons(data);
     });
     return () => unsubscribe();
-  }, []);
+  }, [isPatron]);
+
+  if (!isPatron) {
+    return (
+      <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[32px] p-8 backdrop-blur-sm shadow-[0_0_22px_rgba(0,255,148,0.08)] h-full font-sans text-left">
+        <div className="mb-6 flex items-end justify-between gap-4">
+          <h3 className="font-sans text-[12px] text-sentinel-green tracking-[0.14em] font-bold">명예로운 후원자</h3>
+          <span className="font-sans text-[11px] tracking-[0.08em] text-gray-500">후원자 전용</span>
+        </div>
+        <div className="rounded-2xl border border-sentinel-green/20 bg-sentinel-green/5 px-5 py-6 text-center">
+          <p className="text-[14px] text-gray-300 tracking-[0.02em] leading-[1.8]">
+            후원 후 명예로운 후원자 명단을 확인하실 수 있습니다
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const getPatronBadge = (amount) => {
+    if (amount >= 300000) {
+      return { label: '다이아', color: 'bg-cyan-300', text: 'text-cyan-300' };
+    }
+    if (amount >= 100000) {
+      return { label: '골드', color: 'bg-amber-300', text: 'text-amber-300' };
+    }
+    return { label: '그린', color: 'bg-sentinel-green', text: 'text-sentinel-green' };
+  };
+
+  const mergedPatrons = [...patrons];
+  for (const demoPatron of DEMO_PATRONS) {
+    if (mergedPatrons.length >= 5) break;
+    if (!mergedPatrons.some((patron) => patron.nickname === demoPatron.nickname)) {
+      mergedPatrons.push(demoPatron);
+    }
+  }
+  const topPatrons = mergedPatrons
+    .sort((a, b) => (b.amount || 0) - (a.amount || 0))
+    .slice(0, 5);
 
   return (
-    <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm shadow-sm h-full font-sans text-left">
-      <h3 className="font-mono text-[10px] text-sentinel-green uppercase tracking-[0.3em] italic font-black mb-6 font-headline">Honorable_Patrons</h3>
-      <div className="space-y-4">
-        {patrons.length > 0 ? (
-          patrons.map((patron, i) => (
-            <div key={patron.id} className="flex items-center justify-between p-4 rounded-2xl bg-sentinel-green/5 border border-sentinel-green/10 relative overflow-hidden group">
-              <div className="absolute top-0 left-0 w-1 h-full bg-sentinel-green/30 group-hover:bg-sentinel-green transition-all shadow-sm"></div>
-              <div className="flex items-center gap-4">
-                <span className="font-mono font-black text-sentinel-green opacity-40">0{i+1}</span>
-                <div>
-                  <div className="font-sans font-bold text-sm text-black dark:text-white flex items-center gap-2">
-                    {patron.nickname}
-                    <span className="text-xs">🎖️</span>
-                  </div>
-                  <div className="font-sans text-[8px] text-gray-500 uppercase tracking-widest font-bold">명예로운 운영자</div>
+    <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[32px] p-8 backdrop-blur-sm shadow-[0_0_22px_rgba(0,255,148,0.08)] h-full font-sans text-left">
+      <div className="mb-6 flex items-end justify-between gap-4">
+        <h3 className="font-sans text-[12px] text-sentinel-green tracking-[0.14em] font-bold">이달의 후원자 / 명예로운 후원자</h3>
+        <span className="font-sans text-[11px] tracking-[0.08em] text-gray-500 font-bold">Patron Access</span>
+      </div>
+      <div className="space-y-5">
+        {topPatrons.map((patron, i) => {
+          const badge = getPatronBadge(patron.amount || 0);
+          return (
+          <div key={patron.id} className="flex items-center justify-between gap-4 p-5 rounded-2xl bg-sentinel-green/5 border border-sentinel-green/10 relative overflow-hidden group">
+            <div className="absolute top-0 left-0 w-1 h-full bg-sentinel-green/30 group-hover:bg-sentinel-green transition-all shadow-sm"></div>
+            <div className="flex items-center gap-4">
+              <span className="font-mono font-black text-sentinel-green opacity-40">0{i + 1}</span>
+              <div>
+                <div className="flex items-center gap-2 font-sans font-bold text-sm text-black dark:text-white">
+                  {patron.nickname}
+                  <span className="inline-flex items-center gap-1 rounded-full bg-black/20 px-2 py-0.5 text-[9px] font-sans font-bold">
+                    <span className={`inline-block h-2 w-2 rounded-full ${badge.color}`}></span>
+                    <span className={badge.text}>{badge.label}</span>
+                  </span>
                 </div>
-              </div>
-              <div className="text-right">
-                <div className="font-mono font-bold text-xs text-sentinel-green italic">₩{patron.amount.toLocaleString()}</div>
-                <div className="font-mono text-[7px] text-gray-500 uppercase font-black">{patron.to || 'UNICEF'}</div>
+                <div className="font-sans text-[9px] text-gray-500 uppercase tracking-[0.2em] font-bold">명예 후원자</div>
               </div>
             </div>
-          ))
-        ) : (
-          <div className="py-12 text-center text-gray-500 font-mono text-[10px] uppercase tracking-widest animate-pulse italic">명예로운 후원자를 기다립니다...</div>
-        )}
+            <div className="text-right">
+              <div className="font-sans tabular-nums font-bold text-sm text-sentinel-green">KRW {(patron.amount || 0).toLocaleString()}</div>
+              <div className="font-sans text-[9px] text-gray-500 uppercase tracking-[0.2em] font-bold">{patron.to || 'UNICEF'}</div>
+            </div>
+          </div>
+        )})}
       </div>
     </div>
   );
 };
-
 const DonationModal = ({ isOpen, onClose }) => {
   const [totalDonation, setTotalDonation] = useState(0);
-
   useEffect(() => {
     if (!isOpen) return;
     const q = query(collection(db, 'donations'));
@@ -470,52 +523,48 @@ const DonationModal = ({ isOpen, onClose }) => {
     });
     return () => unsubscribe();
   }, [isOpen]);
-
   if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 font-sans text-left" onClick={onClose}>
-      <motion.div 
+      <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="max-w-2xl w-full bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl overflow-hidden relative shadow-xl"
+        className="max-w-2xl w-full max-h-[90vh] overflow-y-auto bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl overflow-hidden relative shadow-xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/30 shadow-sm"></div>
-        <h2 className="text-xl font-mono font-black mb-6 uppercase italic text-sentinel-green border-b border-sentinel-green/10 pb-4 italic font-headline">기부 증서 (Rule 04)</h2>
-        
+        <h2 className="text-xl font-mono font-black mb-6 uppercase italic text-sentinel-green border-b border-sentinel-green/10 pb-4 font-headline">기부 증서 (Rule 04)</h2>
         <div className="flex flex-col md:flex-row gap-8 items-center text-left">
           <div className="flex-1 space-y-4">
             <div className="p-6 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5 shadow-inner">
-              <p className="text-gray-400 font-sans text-[10px] uppercase tracking-widest mb-1 font-black">Total System Donation</p>
-              <p className="text-2xl font-mono font-black text-black dark:text-white uppercase italic tracking-tighter text-left">총 기부금: <span className="text-sentinel-green">₩{totalDonation.toLocaleString()}</span></p>
+              <p className="text-gray-400 font-sans text-[10px] uppercase tracking-widest mb-1 font-black">총 시스템 기부금</p>
+              <p className="text-[1.8rem] font-sans font-bold text-black dark:text-white tracking-[-0.03em] text-left">
+                총 기부금 <span className="text-sentinel-green tabular-nums">KRW {totalDonation.toLocaleString()}</span>
+              </p>
             </div>
             <div className="space-y-3">
               <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed font-sans font-medium text-left">
-                모든 생존 기록과 여러분의 소중한 후원금은 시스템의 가상 기부금으로 환산됩니다. 
-                축적된 기록은 분기별로 실제 사회 공헌 활동에 사용됩니다.
+                모든 후원 기록은 발표용 시스템의 총 기부금 집계에 반영됩니다.
+                이 패널은 Noto Sans KR 기준으로 숫자와 설명이 안정적으로 정렬되도록 조정했습니다.
               </p>
               <div className="p-4 bg-sentinel-green/5 rounded-xl border border-sentinel-green/10">
-                <p className="text-[11px] font-mono font-black text-sentinel-green uppercase tracking-tighter italic font-headline">
-                  여러분의 후원금 중 50%인 ₩{(totalDonation * 0.5).toLocaleString()}이 기부되었습니다
+                <p className="text-[12px] font-sans font-bold text-sentinel-green tracking-[-0.02em]">
+                  누적 후원금의 50%: <span className="tabular-nums">KRW {Math.floor(totalDonation * 0.5).toLocaleString()}</span>
                 </p>
               </div>
             </div>
           </div>
-          
           <div className="w-full md:w-64 aspect-[3/4] bg-black/10 dark:bg-white/5 rounded-2xl border border-dashed border-sentinel-green/20 flex items-center justify-center relative group overflow-hidden shadow-2xl">
             <div className="absolute inset-0 bg-[url('https://api.placeholder.com/300/400')] bg-cover bg-center opacity-20 grayscale group-hover:grayscale-0 transition-all duration-700 shadow-sm"></div>
-            <span className="relative z-10 text-gray-500 font-mono text-[10px] uppercase tracking-widest text-center px-4 group-hover:text-sentinel-green transition-colors font-black text-center">CERTIFICATE_IMAGE_V2.4</span>
+            <span className="relative z-10 text-gray-500 font-sans text-[10px] uppercase tracking-widest text-center px-4 group-hover:text-sentinel-green transition-colors font-bold">CERTIFICATE_IMAGE_V2.4</span>
             <div className="absolute inset-0 bg-sentinel-green/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl shadow-sm"></div>
           </div>
         </div>
-
-        <button onClick={onClose} className="mt-8 w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-mono font-bold text-xs uppercase tracking-widest rounded-2xl hover:bg-sentinel-green hover:text-black transition-all shadow-xl font-headline shadow-xl">확인 및 복귀</button>
+        <button onClick={onClose} className="mt-8 w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-sans font-bold text-xs uppercase tracking-widest rounded-2xl hover:bg-sentinel-green hover:text-black transition-all shadow-xl font-headline">증서 닫기</button>
       </motion.div>
     </div>
   );
 };
-
 const LiveDot = () => (
   <div className="flex items-center gap-2 px-2 py-1 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-sentinel-green/10 shadow-sm">
     <div className="pulsing-green shadow-sm">
@@ -569,6 +618,36 @@ const ThemeToggle = () => {
   );
 };
 
+const DonationSuccessModal = ({ step, onConfirm, onClose }) => {
+  if (!step) return null;
+
+  const isGratitudeStep = step === 2;
+
+  return (
+    <div className="fixed inset-0 z-[650] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6 font-sans" onClick={onClose}>
+      <motion.div
+        initial={{ scale: 0.94, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="w-full max-w-md rounded-[28px] border border-sentinel-green/30 bg-[#0B0F0D] p-8 text-center shadow-[0_0_35px_rgba(0,255,148,0.16)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-[20px] font-bold tracking-[0.02em] leading-relaxed text-sentinel-green">
+          {isGratitudeStep ? '후원해주셔서 진심으로 감사합니다.' : '후원이 완료되었습니다.'}
+        </h3>
+        <p className="mt-3 text-[13px] text-gray-400 leading-relaxed tracking-[0.01em]">
+          {isGratitudeStep ? '명예로운 후원자 기록에 반영되었습니다.' : '시스템이 후원 내역을 안전하게 처리했습니다.'}
+        </p>
+        <button
+          onClick={onConfirm}
+          className="mt-7 w-full rounded-2xl bg-sentinel-green py-3 text-sm font-bold text-black transition-opacity hover:opacity-90"
+        >
+          {isGratitudeStep ? '닫기' : '확인'}
+        </button>
+      </motion.div>
+    </div>
+  );
+};
+
 const MinigameHub = () => {
   const { addBonusTime } = useTimer();
   const games = [
@@ -588,7 +667,7 @@ const MinigameHub = () => {
         <div 
           key={i} 
           onClick={() => handleSimulateWin(game)}
-          className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/10 p-5 rounded-3xl hover:border-sentinel-green/30 transition-all group cursor-pointer relative overflow-hidden shadow-glow-green dark:shadow-glow-green-lg active:scale-95 text-left"
+          className="monitoring-panel-sm bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/10 p-5 rounded-3xl hover:border-sentinel-green/30 transition-all group cursor-pointer relative overflow-hidden shadow-glow-green dark:shadow-glow-green-lg active:scale-95 text-left"
         >
           <div className="absolute top-0 right-0 p-3 opacity-20 font-mono text-[10px] uppercase tracking-widest font-black shadow-sm text-right">v1.0</div>
           <div className="text-2xl mb-3 group-hover:scale-110 transition-transform inline-block shadow-sm"> {game.icon}</div>
@@ -606,11 +685,16 @@ const MinigameHub = () => {
 
 // Mock competitor data generator
 const generateMockCompetitors = () => {
-  const koreanFirstNames = ['김', '이', '박', '최', '정', '강', '조', '윤'];
-  const koreanLastNames = ['민준', '지윤', '준호', '민지', '수진', '성호', '동욱', '준영'];
-  const adjectives = ['빠른', '강한', '용감한', '영리한', '민첩한', '대담한', '재빠른', '똑똑한'];
-  const nouns = ['사수', '검사', '전사', '수호자', '파수꾼', '수사관', '요원', '기사'];
-  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2'];
+  const mockNames = [
+    'CipherFox',
+    'NeonRiver',
+    'OrbitZero',
+    'SignalBloom',
+    'VectorLime',
+    'NightRelay',
+    'StaticWave',
+    'EchoFrame'
+  ];
   
   const mockData = [];
   for (let i = 0; i < 6; i++) {
@@ -618,7 +702,7 @@ const generateMockCompetitors = () => {
     const variance = Math.random() * 7200000; // 0 to 2 hours variance
     mockData.push({
       id: `mock_${i}`,
-      nickname: `${koreanFirstNames[Math.floor(Math.random() * 8)]}${koreanLastNames[Math.floor(Math.random() * 8)]}`,
+      nickname: mockNames[i % mockNames.length],
       photoURL: `https://i.pravatar.cc/32?img=${Math.floor(Math.random() * 70) + 1}`,
       survival_time: baseTime + variance,
       status: Math.random() > 0.3 ? 'ONLINE' : 'OFFLINE'
@@ -634,7 +718,7 @@ const ShortcutGuide = ({ isOpen, onClose }) => {
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="max-w-md w-full bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl shadow-xl"
+        className="max-w-md w-full max-h-[90vh] overflow-y-auto bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl shadow-xl"
         onClick={e => e.stopPropagation()}
       >
         <h2 className="text-xl font-mono font-black mb-6 uppercase italic text-sentinel-green border-b border-sentinel-green/10 pb-4 italic font-headline text-left">시스템 단축키 안내</h2>
@@ -682,10 +766,10 @@ const NicknameModal = () => {
       <motion.div 
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="max-w-md w-full bg-white dark:bg-sentinel-dark-card border border-sentinel-green/20 p-12 rounded-[40px] shadow-2xl relative overflow-hidden shadow-xl"
+        className="max-w-md w-full max-h-[90vh] overflow-y-auto bg-white dark:bg-sentinel-dark-card border border-sentinel-green/20 p-12 rounded-[40px] shadow-2xl relative overflow-hidden shadow-xl"
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/20 shadow-sm"></div>
-        <h2 className="text-3xl font-mono font-black mb-2 italic uppercase tracking-tighter text-black dark:text-white font-headline italic tracking-tight text-left">ID 초기화</h2>
+        <h2 className="text-3xl font-mono font-black mb-2 italic uppercase tracking-tighter text-black dark:text-white font-headline tracking-tight text-left">ID Setup</h2>
         <p className="text-gray-400 text-sm font-sans mb-10 uppercase tracking-[0.2em] font-black text-left">운영자 코드 등록이 필요합니다</p>
         <form onSubmit={handleSubmit} className="space-y-8 text-left">
           <div className="relative text-left">
@@ -693,7 +777,7 @@ const NicknameModal = () => {
               type="text" 
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
-              placeholder="운영자_ID"
+              placeholder="운영자 ID"
               className="w-full px-6 py-5 bg-black/5 dark:bg-black/40 border border-sentinel-green/10 rounded-2xl font-mono text-base focus:ring-1 focus:ring-sentinel-green/50 outline-none text-black dark:text-white placeholder:text-gray-300 transition-all font-black shadow-inner text-left"
               autoFocus
             />
@@ -757,11 +841,11 @@ const LeaderboardTable = ({ onRankUpdate }) => {
   }, [user, onRankUpdate]);
 
   return (
-    <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg h-full font-sans text-left">
+    <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg h-full font-sans text-left">
       {useMockData && (
         <div className="bg-sentinel-green/10 border-b border-sentinel-green/20 px-8 py-3">
           <p className="text-xs font-mono text-sentinel-green font-black uppercase tracking-widest italic">
-            📡 DEMO MODE - SIMULATED LEADERBOARD
+            데모 모드 - 시뮬레이션 리더보드
           </p>
         </div>
       )}
@@ -769,9 +853,9 @@ const LeaderboardTable = ({ onRankUpdate }) => {
         <thead>
           <tr className="bg-sentinel-green/5 border-b border-sentinel-green/10 shadow-sm">
             <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 font-black italic shadow-sm text-left">순위</th>
-            <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 font-black italic text-left shadow-sm">운영자</th>
+            <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 font-black italic text-left shadow-sm">Nickname</th>
             <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 text-center font-black italic shadow-sm">상태</th>
-            <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 text-right font-black italic shadow-sm">생존시간</th>
+            <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 text-right font-black italic shadow-sm">생존 시간</th>
           </tr>
         </thead>
         <tbody className="relative min-h-[400px] text-left">
@@ -802,7 +886,7 @@ const LeaderboardTable = ({ onRankUpdate }) => {
                         <div className="text-left">
                           <div className={`font-sans font-bold text-sm leading-none mb-0.5 text-left shadow-sm ${isMe ? 'text-sentinel-green font-black' : 'text-black dark:text-white'}`}>
                             {comp.nickname || 'Unknown'}
-                            {isMe && <span className="ml-2 text-[9px] bg-sentinel-green/20 px-1.5 py-0.5 rounded uppercase tracking-tighter font-black font-sans shadow-sm">You</span>}
+                            {isMe && <span className="ml-2 text-[9px] bg-sentinel-green/20 px-1.5 py-0.5 rounded uppercase tracking-tighter font-black font-sans shadow-sm">나</span>}
                           </div>
                           <div className="font-mono text-[7px] text-gray-400 uppercase tracking-widest font-black opacity-60 text-left shadow-sm">{comp.id.substring(0, 8)}</div>
                         </div>
@@ -813,7 +897,7 @@ const LeaderboardTable = ({ onRankUpdate }) => {
                         comp.status === 'ONLINE' ? 'bg-sentinel-green/10 text-sentinel-green shadow-[0_0_10px_rgba(0,255,148,0.1)] shadow-sm' : 'bg-gray-100 dark:bg-white/5 text-gray-400 opacity-50 shadow-sm'
                       }`}>
                         <span className={`w-1 h-1 rounded-full ${comp.status === 'ONLINE' ? 'bg-sentinel-green animate-pulse shadow-[0_0_5px_rgba(0,255,148,0.8)] shadow-sm' : 'bg-gray-400 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm'}`}></span>
-                        {comp.status === 'ONLINE' ? '실시간' : '오프라인'}
+                        {comp.status === 'ONLINE' ? '온라인' : '오프라인'}
                       </span>
                     </td>
                     <td className={`px-4 py-4 text-right font-mono font-bold text-sm tracking-widest italic shadow-sm text-right ${isMe ? 'text-sentinel-green drop-shadow-[0_0_8px_rgba(0,255,148,0.4)] shadow-sm' : 'text-black dark:text-white shadow-sm'}`}>
@@ -826,7 +910,7 @@ const LeaderboardTable = ({ onRankUpdate }) => {
               <tr>
                 <td colSpan="4" className="px-8 py-20 text-center shadow-sm">
                   <div className="font-mono text-base text-gray-400 uppercase tracking-[0.3em] font-black shadow-sm text-center shadow-sm font-sans">
-                    {loading ? '데이터 동기화 중...' : <TypingText text="생존자를 탐색 중입니다..." className="font-sans text-base" />}
+                    {loading ? "데이터 로딩 중..." : <TypingText text="생존자를 탐색 중입니다..." className="font-sans text-base" />}
                   </div>
                 </td>
               </tr>
@@ -842,8 +926,10 @@ const Chat = () => {
   const { user, profile, isAdmin } = useAuth();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [spamWarning, setSpamWarning] = useState('');
   const scrollRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const lastMessageRef = useRef({ text: '', timestamp: 0 });
 
   useEffect(() => {
     const q = query(collection(db, 'messages'), orderBy('timestamp', 'asc'), limit(50));
@@ -863,31 +949,44 @@ const Chat = () => {
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!input.trim() || !user) return;
+
+    // Anti-Spam: 동일한 메시지 연속 전송 방지
+    const trimmedInput = input.trim();
+    const now = Date.now();
+    
+    if (trimmedInput === lastMessageRef.current.text && now - lastMessageRef.current.timestamp < 10000) {
+      setSpamWarning('중복된 내용은 보낼 수 없습니다. 10초 후에 다시 시도하세요.');
+      setTimeout(() => setSpamWarning(''), 4000);
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'messages'), {
-        text: input, uid: user.uid, nickname: profile?.nickname || 'Guest',
+        text: trimmedInput, uid: user.uid, nickname: profile?.nickname || '게스트',
         role: isAdmin ? 'ADMIN' : 'USER', timestamp: serverTimestamp()
       });
+      lastMessageRef.current = { text: trimmedInput, timestamp: now };
       setInput('');
+      setSpamWarning('');
     } catch (error) {
       console.error("Send Message Error:", error);
     }
   };
 
   return (
-    <aside className="w-full flex min-h-0 flex-1 flex-col bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg font-sans text-left">
+    <aside className="monitoring-panel w-full h-full flex min-h-0 flex-1 flex-col bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg font-sans text-left">
       <div className="p-6 border-b border-sentinel-green/10 bg-sentinel-green/5 flex items-center justify-between shadow-sm shadow-xl shadow-sm">
-        <h3 className="font-mono font-black text-xs tracking-tighter flex items-center gap-2 uppercase italic text-sentinel-green font-headline tracking-tight text-left">
+        <h3 className="font-sans font-black text-xs tracking-widest flex items-center gap-2 uppercase italic text-sentinel-green font-headline tracking-tight text-left">
           라이브 채널
         </h3>
         <LiveDot />
       </div>
-      <div ref={scrollRef} className="chat-scroll-area min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-4 space-y-5 text-left shadow-inner">
+      <div ref={scrollRef} className="chat-scroll-area min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-2 space-y-4 text-left shadow-inner">
         {messages.map(msg => (
           <div key={msg.id} className="space-y-1.5 text-left">
             <div className="flex items-center justify-between gap-3 text-left">
-              <span className={`font-sans text-[11px] font-bold tracking-[-0.02em] ${msg.role === 'ADMIN' ? 'text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)]' : 'text-sentinel-green'} text-left`}>{msg.nickname}</span>
-              <span className="font-sans text-[10px] text-gray-500 font-medium opacity-70 tabular-nums text-right">{(msg.timestamp?.toMillis ? new Date(msg.timestamp.toMillis()) : new Date()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+              <span className={`font-sans text-[11px] font-bold tracking-[-0.02em] leading-none ${msg.role === 'ADMIN' ? 'text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)]' : 'text-sentinel-green'} text-left`}>{msg.nickname}</span>
+              <span className="font-sans text-[10px] text-gray-500 font-medium opacity-70 tabular-nums text-right leading-none">{(msg.timestamp?.toMillis ? new Date(msg.timestamp.toMillis()) : new Date()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
             </div>
             <p className={`rounded-2xl border px-3 py-3 text-[13px] leading-[1.55] font-sans font-medium shadow-sm ${
               msg.role === 'ADMIN' ? 'bg-red-500/10 border-red-500/20 text-red-500' : 'bg-black/20 dark:bg-black/40 border-sentinel-green/5 text-gray-700 dark:text-gray-300'
@@ -898,7 +997,12 @@ const Chat = () => {
         ))}
         <div ref={messagesEndRef} />
       </div>
-      <div className="sticky bottom-0 z-10 p-6 bg-sentinel-green/5 border-t border-sentinel-green/10 backdrop-blur-md shadow-xl shadow-sm">
+      {spamWarning && (
+        <div className="px-6 py-2 bg-yellow-500/10 border-t border-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-xs font-sans font-medium text-center animate-pulse">
+          {spamWarning}
+        </div>
+      )}
+      <div className="shrink-0 p-6 bg-sentinel-green/5 border-t border-sentinel-green/10 backdrop-blur-md shadow-xl shadow-sm">
         {user ? (
           <form onSubmit={sendMessage} className="flex gap-2">
             <input 
@@ -915,8 +1019,8 @@ const Chat = () => {
           </form>
         ) : (
           <div className="text-center py-2 text-center shadow-sm">
-            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest mb-3 italic font-black opacity-60 font-sans text-center">통신을 위해 권한이 필요합니다</p>
-            <button onClick={() => window.scrollTo(0, 0)} className="w-full bg-black dark:bg-sentinel-green dark:text-black text-sentinel-green py-3 rounded-xl font-mono font-black text-[10px] uppercase border border-sentinel-green/20 hover:bg-sentinel-green hover:text-black transition-all shadow-lg font-headline shadow-xl text-center shadow-xl">보안 엑세스</button>
+            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest mb-3 italic font-black opacity-60 font-sans text-center">메시지를 보내려면 로그인이 필요합니다.</p>
+            <button onClick={() => window.scrollTo(0, 0)} className="w-full bg-black dark:bg-sentinel-green dark:text-black text-sentinel-green py-3 rounded-xl font-mono font-black text-[10px] uppercase border border-sentinel-green/20 hover:bg-sentinel-green hover:text-black transition-all shadow-lg font-headline shadow-xl text-center shadow-xl">로그인하러 가기</button>
           </div>
         )}
       </div>
@@ -934,28 +1038,42 @@ function App() {
   const [isDonationOpen, setIsDonationOpen] = useState(false);
   const [isSponsorshipOpen, setIsSponsorshipOpen] = useState(false);
   const [isUpdateNoteOpen, setIsUpdateNoteOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(false);
   const [competitorStats, setCompetitorStats] = useState({ count: 0, myRank: 'PENDING...' });
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [donationPopupStep, setDonationPopupStep] = useState(0);
+  const [module04Height, setModule04Height] = useState(null);
+  const leftModulesRef = useRef(null);
+  const paymentHandledRef = useRef(false);
+
   const [showInitializing, setShowInitializing] = useState(false);
+  const [hasPlayedWelcomeSequence, setHasPlayedWelcomeSequence] = useState(() => sessionStorage.getItem('sentinel_boot_sequence') === 'done');
 
-  // Show SYSTEM INITIALIZING only on first load when nickname modal appears
   useEffect(() => {
-    if (showNicknameModal && !showInitializing) {
-      setShowInitializing(true);
-      const timer = setTimeout(() => setShowInitializing(false), 2000);
-      return () => clearTimeout(timer);
+    if (!user) {
+      setShowSplash(false);
+      setShowInitializing(false);
+      return;
     }
-  }, [showNicknameModal]);
+    if (hasPlayedWelcomeSequence) return;
 
-  useEffect(() => {
-    if (user) {
+    setShowInitializing(true);
+    const initTimer = setTimeout(() => {
+      setShowInitializing(false);
       setShowSplash(true);
-      const timer = setTimeout(() => setShowSplash(false), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [user]);
+    }, 1800);
+    const splashTimer = setTimeout(() => {
+      setShowSplash(false);
+      setHasPlayedWelcomeSequence(true);
+      sessionStorage.setItem('sentinel_boot_sequence', 'done');
+    }, 5000);
+
+    return () => {
+      clearTimeout(initTimer);
+      clearTimeout(splashTimer);
+    };
+  }, [user, hasPlayedWelcomeSequence]);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -974,6 +1092,21 @@ function App() {
     setCompetitorStats({ count, myRank: rank });
   };
 
+  const handleDonationSuccessFlow = () => {
+    setDonationPopupStep(1);
+  };
+
+  const handleDonationPopupConfirm = () => {
+    if (donationPopupStep === 1) {
+      setDonationPopupStep(2);
+      return;
+    }
+    setDonationPopupStep(0);
+  };
+
+  const handleDonationPopupClose = () => {
+    setDonationPopupStep(0);
+  };
   // 결제 결과 확인 및 기록
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -981,7 +1114,8 @@ function App() {
     const amount = urlParams.get('amount');
     const to = urlParams.get('to');
 
-    if (status === 'success' && amount && user) {
+    if (status === 'success' && amount && user && !paymentHandledRef.current) {
+      paymentHandledRef.current = true;
       const recordDonation = async () => {
         try {
           await addDoc(collection(db, 'donations'), {
@@ -993,8 +1127,7 @@ function App() {
           });
           // URL 파라미터 제거
           window.history.replaceState({}, document.title, window.location.pathname);
-          alert('기부 증서 발급 완료!');
-          setIsDonationOpen(true);
+          handleDonationSuccessFlow();
         } catch (error) {
           console.error('Donation recording failed:', error);
         }
@@ -1005,15 +1138,17 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Shift + Q: 터미널
+      // Shift + Q: admin terminal
       if (e.shiftKey && e.key.toUpperCase() === 'Q' && isAdmin) {
         setIsTerminalOpen(p => !p);
       }
-      // Shift + /: 도움말
+
+      // Shift + /: shortcut guide
       if (e.shiftKey && e.key === '?') {
         setIsGuideOpen(p => !p);
       }
-      // 테마 토글 (Shift + T)
+
+      // Shift + T: theme toggle
       if (e.shiftKey && e.key.toUpperCase() === 'T') {
         const isDark = document.documentElement.classList.contains('dark');
         if (isDark) {
@@ -1029,31 +1164,61 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (!user) return;
+
+    const syncModuleHeight = () => {
+      if (window.innerWidth < 1024 || !leftModulesRef.current) {
+        setModule04Height(null);
+        return;
+      }
+      const nextHeight = Math.ceil(leftModulesRef.current.getBoundingClientRect().height);
+      setModule04Height(nextHeight);
+    };
+
+    syncModuleHeight();
+    requestAnimationFrame(syncModuleHeight);
+
+    const observer = new ResizeObserver(syncModuleHeight);
+    if (leftModulesRef.current) observer.observe(leftModulesRef.current);
+    window.addEventListener('resize', syncModuleHeight);
+    const timer = window.setInterval(syncModuleHeight, 600);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', syncModuleHeight);
+      window.clearInterval(timer);
+    };
+  }, [user, showNicknameModal]);
+
   return (
     <div className="min-h-screen bg-white dark:bg-sentinel-dark-bg text-black dark:text-white selection:bg-sentinel-green selection:text-black antialiased transition-colors duration-500 font-sans text-left overflow-x-hidden shadow-sm">
       <WelcomeSplash user={user} visible={showSplash} />
-      <InitializingScreen visible={showInitializing && showNicknameModal} />
+      <InitializingScreen visible={showInitializing} />
       
       {(!isActive || isTerminated) && (
         <div className="fixed inset-0 z-[200] bg-white/95 dark:bg-black/95 backdrop-blur-xl flex items-center justify-center p-6 text-center shadow-2xl shadow-xl">
-          <div className="max-w-md w-full space-y-8 font-sans text-center shadow-sm">
+          <div className="max-w-md w-full space-y-6 rounded-[32px] border border-sentinel-green/15 bg-white/80 p-8 font-sans text-center shadow-2xl dark:bg-[#050505]/90">
             <div className={`w-24 h-24 rounded-3xl mx-auto flex items-center justify-center shadow-2xl rotate-12 ${isTerminated ? 'bg-red-500 shadow-red-500/20' : 'bg-sentinel-green shadow-sentinel-green/20 shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm'}`}>
-              <span className="text-4xl drop-shadow-xl shadow-sm">🛡️</span>
+              <span className="text-4xl drop-shadow-xl shadow-sm">!</span>
             </div>
             <div className="text-center shadow-sm">
-              <h2 className="text-3xl font-mono font-black mb-2 tracking-tighter uppercase italic text-black dark:text-white font-headline drop-shadow-sm shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm">
-                {isTerminated ? '종료됨' : '이미 실행 중'}
+              <p className="mb-3 text-[11px] font-sans font-bold uppercase tracking-[0.28em] text-sentinel-green">
+                {isTerminated ? 'Rule 04' : 'Rule 03'}
+              </p>
+              <h2 className="text-3xl font-sans font-bold mb-2 tracking-[-0.03em] text-black dark:text-white drop-shadow-sm shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm">
+                {isTerminated ? 'Session Terminated' : 'Another Session Detected'}
               </h2>
-              <p className="text-gray-400 font-sans text-[10px] uppercase tracking-widest leading-relaxed whitespace-pre-line font-black opacity-80 italic shadow-sm">
+              <p className="text-gray-400 font-sans text-[12px] leading-relaxed whitespace-pre-line font-medium opacity-90 shadow-sm">
                 {isTerminated 
-                  ? '관리자 명령에 의해 세션이 강제 종료되었습니다.' 
-                  : 'Rule-03 위반: 다른 탭에서 이미 실행 중입니다.\n이 탭에서 계속하려면 아래 버튼을 누르세요.'}
+                  ? '관리자 명령으로 현재 세션이 종료되었습니다.'
+                  : '다른 탭에서 이미 활성 세션이 실행 중입니다.\n이 탭을 계속 사용하려면 아래 버튼으로 세션을 가져오세요.'}
               </p>
             </div>
             {!isTerminated && (
               <button 
                 onClick={resumeHere}
-                className="w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-mono font-black text-xs uppercase tracking-widest rounded-2xl hover:scale-[1.02] transition-all font-headline shadow-lg hover:shadow-sentinel-green/20 shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm"
+                className="w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-sans font-bold text-sm tracking-[0.08em] rounded-2xl hover:scale-[1.02] transition-all shadow-lg hover:shadow-sentinel-green/20 shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm"
               >
                 이 탭에서 계속하기
               </button>
@@ -1105,30 +1270,30 @@ function App() {
           className="max-w-7xl mx-auto px-4 pt-24 pb-12 grid grid-cols-1 lg:grid-cols-12 items-stretch gap-8 min-h-screen text-left text-left text-left text-left shadow-sm"
         >
           {/* Left Column */}
-          <div className="lg:col-span-8 space-y-8 self-stretch text-left text-left shadow-sm">
+          <div ref={leftModulesRef} className="lg:col-span-8 space-y-8 self-stretch text-left text-left shadow-sm">
             {/* Modules Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left text-left text-left text-left shadow-sm shadow-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left text-left text-left text-left shadow-sm shadow-sm">
               {/* Module 1: Status */}
-              <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm relative overflow-hidden group shadow-glow-green dark:shadow-glow-green-lg transition-all hover:shadow-glow-green/50 text-left font-sans text-left">
+              <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[32px] p-8 backdrop-blur-sm relative overflow-hidden group shadow-glow-green dark:shadow-glow-green-lg transition-all hover:shadow-glow-green/50 text-left font-sans text-left">
                 <div className="flex justify-between items-start mb-6 text-left shadow-sm">
-                  <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm">Module_01: 시스템_상태</h3>
+                  <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm">Module_01: 시스템_상태</h3>
                   <LiveDot />
                 </div>
-                <h1 className="text-4xl font-mono font-black tracking-tighter uppercase italic text-black dark:text-white mb-2 font-headline italic italic italic italic text-left shadow-sm">디지털 센티널</h1>
+                <h1 className="text-4xl font-mono font-black tracking-tighter uppercase italic text-black dark:text-white mb-2 font-headline text-left shadow-sm">Digital Sentinel</h1>
                 <div className="flex flex-wrap items-center gap-4 text-left text-left text-left shadow-sm shadow-sm">
                   <p className="font-sans text-xs text-gray-500 uppercase tracking-widest font-black opacity-80 font-bold text-left shadow-sm shadow-sm shadow-sm">
                     오늘의 경쟁자: <span className="text-sentinel-green font-black shadow-sm">{competitorStats.count.toLocaleString()}명</span>
                   </p>
                   <div className="h-4 w-px bg-gray-200 dark:bg-white/10 shadow-sm shadow-sm shadow-sm shadow-sm"></div>
                   <p className="font-sans text-xs text-gray-500 uppercase tracking-widest font-black opacity-80 font-bold text-left shadow-sm shadow-sm shadow-sm">
-                    나의 현재 순위: <span className="text-sentinel-green font-black underline decoration-sentinel-green/30 shadow-sm">{competitorStats.myRank}위</span>
+                    현재 순위: <span className="text-sentinel-green font-black underline decoration-sentinel-green/30 shadow-sm">{competitorStats.myRank}</span>
                   </p>
                   <div className="h-4 w-px bg-gray-200 dark:bg-white/10 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm"></div>
                   <button 
                     onClick={() => setIsDonationOpen(true)}
                     className="font-sans text-xs text-sentinel-green hover:underline uppercase tracking-widest font-black italic font-headline font-bold italic shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-center shadow-sm"
                   >
-                    기부 확인증
+                    기부 증서 보기
                   </button>
                 </div>
                 <div className="mt-8 flex gap-1.5 shadow-inner shadow-inner shadow-inner shadow-inner shadow-sm shadow-sm shadow-sm">
@@ -1139,46 +1304,51 @@ function App() {
               </div>
 
               {/* Module 2: Survival Timer */}
-              <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm relative shadow-glow-green dark:shadow-glow-green-lg transition-all text-left overflow-hidden">
+              <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[32px] p-8 backdrop-blur-sm relative shadow-glow-green dark:shadow-glow-green-lg transition-all text-left overflow-hidden">
                 <div className="flex justify-between items-start mb-6 font-sans text-left text-left text-left shadow-sm">
-                  <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm shadow-sm shadow-sm">Module_02: 생존_카운트</h3>
+                  <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm">Module_02: 생존_카운트</h3>
                   <LiveDot />
                 </div>
                 <div className="flex min-w-0 flex-col justify-center items-center py-2 text-center text-center text-center shadow-sm shadow-sm overflow-visible">
                   <p 
-                    className={`font-mono tabular-nums font-black tracking-[0.02em] leading-none glow-green drop-shadow-2xl italic transition-all duration-300 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm whitespace-nowrap ${bonusPulse ? 'text-white scale-110 shadow-[0_0_30px_rgba(0,255,148,0.6)] shadow-xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm' : 'text-sentinel-green shadow-sm shadow-sm'}`}
+                    className={`timer-display tabular-nums font-black tracking-[0.02em] leading-none glow-green drop-shadow-2xl italic transition-all duration-300 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm whitespace-nowrap ${bonusPulse ? 'text-white scale-110 shadow-[0_0_30px_rgba(0,255,148,0.6)] shadow-xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm' : 'text-sentinel-green shadow-sm shadow-sm'}`}
                     style={{fontSize: 'clamp(1.7rem, 5.6vw, 2.85rem)', letterSpacing: '-0.03em'}}
                   >
                     {formatTime(survivalTime)}
                   </p>
-                  <p className="font-sans font-medium text-sm text-gray-400 dark:text-gray-500 mt-4 uppercase tracking-[0.15em] opacity-60 shadow-sm shadow-sm shadow-sm text-center shadow-sm shadow-sm leading-tight">10초마다 데이터 클라우드 동기화 중...</p>
+                  <p className="font-sans font-medium text-sm text-gray-400 dark:text-gray-500 mt-4 uppercase tracking-[0.15em] opacity-60 shadow-sm shadow-sm shadow-sm text-center shadow-sm shadow-sm leading-tight">10초마다 데이터가 실시간으로 동기화됩니다</p>
                 </div>
               </div>
             </div>
 
             {/* Module 3: Live Leaderboard */}
-            <div className="space-y-4 text-left font-sans text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm">
+            <div className="space-y-3 text-left font-sans text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm">
               <div className="flex items-center justify-between px-4 font-sans font-black font-sans font-black font-sans font-black font-sans font-black shadow-sm shadow-sm shadow-sm shadow-sm">
-                <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm shadow-sm shadow-sm">Module_03: 실시간_데이터_센터</h3>
-                <span className="font-mono text-[9px] text-sentinel-green/60 uppercase italic tracking-widest font-headline italic italic italic italic italic italic shadow-sm shadow-sm shadow-sm text-right shadow-sm shadow-sm shadow-sm shadow-sm">NETWORK_ACTIVE</span>
+                <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm">Module_03: 실시간_리더보드</h3>
+                <span className="font-sans text-[9px] text-sentinel-green/60 uppercase italic tracking-widest font-headline italic italic italic italic italic italic shadow-sm shadow-sm shadow-sm text-right shadow-sm shadow-sm shadow-sm shadow-sm">네트워크 활성</span>
               </div>
               <LeaderboardTable onRankUpdate={handleRankUpdate} />
             </div>
 
+            <HallOfFame />
+
             {/* Minigame Hub */}
-            <div className="pt-4 font-sans text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm">
-              <div className="flex items-center justify-between px-4 mb-4 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
-                <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Module_05: 미니게임_허브</h3>
+            <div className="pt-2 font-sans text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm">
+              <div className="flex items-center justify-between px-4 mb-3 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
+                <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Module_05: 미니게임_허브</h3>
               </div>
               <MinigameHub />
             </div>
           </div>
 
           {/* Right Column: Communication */}
-          <div className="lg:col-span-4 flex min-h-0 self-stretch flex-col space-y-4 font-sans text-left text-left text-left text-left text-left text-left shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm">
+          <div
+            className="lg:col-span-4 h-full flex min-h-0 self-stretch flex-col space-y-2 overflow-hidden font-sans text-left text-left text-left text-left text-left text-left shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm"
+            style={module04Height ? { height: `${module04Height}px`, maxHeight: `${module04Height}px` } : undefined}
+          >
             <div className="flex items-center justify-between px-2 text-left text-left text-left text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
-              <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Module_04: 시스템_통신</h3>
-              <span className="font-mono text-[9px] text-sentinel-green/60 uppercase italic font-headline tracking-widest opacity-60 italic italic italic italic italic italic italic italic shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-right shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Secure Link Active</span>
+              <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Module_04: 시스템_통신</h3>
+              <span className="font-sans text-[9px] text-sentinel-green/60 uppercase italic font-headline tracking-widest opacity-60 italic italic italic italic italic italic italic italic shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-right shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">보안 링크 활성</span>
             </div>
             <Chat />
           </div>
@@ -1188,10 +1358,10 @@ function App() {
           <div className="max-w-md w-full bg-white dark:bg-sentinel-dark-card border border-gray-100 dark:border-sentinel-green/10 rounded-[48px] shadow-2xl p-12 text-center relative overflow-hidden shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm shadow-sm">
             <div className="absolute top-0 left-0 w-full h-1.5 bg-sentinel-green shadow-[0_0_15px_rgba(0,255,148,0.5)] shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm"></div>
             <div className="w-24 h-24 bg-black dark:bg-sentinel-green rounded-[32px] mx-auto flex items-center justify-center mb-10 shadow-2xl rotate-6 transition-transform hover:rotate-12 duration-500 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
-              <span className="text-4xl dark:grayscale drop-shadow-xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">🛡️</span>
+              <span className="text-4xl dark:grayscale drop-shadow-xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">!</span>
             </div>
             <h2 className="text-4xl font-mono font-black mb-4 uppercase italic tracking-tighter text-black dark:text-white italic tracking-tight font-headline shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-center shadow-sm">DIGITAL SENTINEL</h2>
-            <p className="text-gray-500 dark:text-gray-400 font-sans text-base uppercase tracking-[0.3em] mb-12 leading-relaxed italic font-black opacity-80 text-center text-center text-center text-center text-center text-center text-center text-center text-center font-bold font-bold font-bold font-bold font-bold shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">권한이 필요합니다<br/>보안 프로토콜 초기화 중</p>
+            <p className="text-gray-500 dark:text-gray-400 font-sans text-base uppercase tracking-[0.3em] mb-12 leading-relaxed italic font-black opacity-80 text-center">접근 권한이 필요합니다<br/>보안 프로토콜을 초기화하세요</p>
             <button
               className="w-full py-5 bg-black dark:bg-sentinel-green dark:text-black hover:bg-sentinel-green dark:hover:bg-sentinel-green/80 text-white hover:text-black font-mono font-black text-sm rounded-[24px] transition-all duration-500 uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.1)] hover:shadow-sentinel-green/30 active:scale-95 font-headline shadow-lg shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm text-center shadow-xl shadow-xl shadow-xl"
               onClick={loginWithGoogle}
@@ -1203,14 +1373,14 @@ function App() {
         </div>
       )}
 
-      {showNicknameModal && <NicknameModal />}
+      {showNicknameModal && !showInitializing && <NicknameModal />}
       {isAdmin && <AdminTerminal isOpen={isTerminalOpen} onClose={() => setIsTerminalOpen(false)} />}
       <ShortcutGuide isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
       <DonationModal isOpen={isDonationOpen} onClose={() => setIsDonationOpen(false)} />
       <SponsorshipModal 
         isOpen={isSponsorshipOpen} 
         onClose={() => setIsSponsorshipOpen(false)}
-        onDonationSuccess={() => setIsDonationOpen(true)}
+        onDonationSuccess={handleDonationSuccessFlow}
       />
       <UpdateNoteModal isOpen={isUpdateNoteOpen} onClose={() => setIsUpdateNoteOpen(false)} />
       <ProfileModal 
@@ -1221,6 +1391,11 @@ function App() {
           setTimeout(() => setSuccessMessage(''), 3000);
         }}
       />
+      <DonationSuccessModal
+        step={donationPopupStep}
+        onConfirm={handleDonationPopupConfirm}
+        onClose={handleDonationPopupClose}
+      />
       <BonusToast pulse={bonusPulse} />
       <SuccessToast message={successMessage} visible={!!successMessage} />
     </div>
@@ -1228,3 +1403,4 @@ function App() {
 }
 
 export default App;
+

@@ -1,18 +1,21 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
 @config "../tailwind.config.js";
 
 :root {
-  font-family: 'Noto Sans KR', 'Inter', 'Pretendard', system-ui, -apple-system, sans-serif;
-  line-height: 1.5;
+  font-family: 'Noto Sans KR', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', system-ui, -apple-system, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+  line-height: 1.62;
   font-weight: 400;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.01em;
   font-size: 1.15rem;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  font-family: 'Noto Sans KR', 'Inter', 'Pretendard', system-ui, -apple-system, sans-serif;
+  font-family: 'Noto Sans KR', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', system-ui, -apple-system, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+  letter-spacing: 0.01em;
+  line-height: 1.62;
 }
 
 #root {
@@ -52,6 +55,20 @@ body {
   .module-card:hover {
     box-shadow: 0 0 30px rgba(0, 255, 148, 0.1), inset 0 0 20px rgba(0, 255, 148, 0.05);
   }
+
+  .monitoring-panel {
+    border-radius: 32px;
+    box-shadow:
+      0 0 24px rgba(0, 255, 148, 0.08),
+      inset 0 0 20px rgba(0, 255, 148, 0.03);
+  }
+
+  .monitoring-panel-sm {
+    border-radius: 24px;
+    box-shadow:
+      0 0 18px rgba(0, 255, 148, 0.07),
+      inset 0 0 14px rgba(0, 255, 148, 0.025);
+  }
   
   /* Typography standardization for Noto Sans KR */
   * {
@@ -59,12 +76,15 @@ body {
     -moz-osx-font-smoothing: grayscale;
     -moz-text-rendering: optimizeLegibility;
     text-rendering: optimizeLegibility;
-    font-family: 'Noto Sans KR', 'Inter', 'Pretendard', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    font-family: 'Noto Sans KR', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', system-ui, -apple-system, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
   }
   
   /* Regular body text: font-weight 400 */
   p, span, button, label, input, textarea {
     font-weight: 400;
+    letter-spacing: 0.01em;
+    line-height: 1.62;
   }
   
   /* Medium emphasis text: font-weight 500 */
@@ -77,7 +97,23 @@ body {
   
   /* Monospace only for code/timer numbers */
   .font-mono, code, pre {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Noto Sans KR', 'JetBrains Mono', monospace;
+  }
+
+  .timer-display {
+    font-family: 'JetBrains Mono', 'D2Coding', 'Consolas', monospace !important;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+  }
+
+  .module-header-text {
+    font-family: 'Noto Sans KR', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1.45;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
   }
   
   /* Loading animation */

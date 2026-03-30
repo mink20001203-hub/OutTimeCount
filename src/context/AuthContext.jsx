@@ -1,11 +1,20 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { auth, googleProvider, db } from '../firebase';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { auth, db, googleProvider } from '../firebase';
 
 const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
+
+const getCharacterLength = (value) => {
+  if (!value) return 0;
+  if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+    const segmenter = new Intl.Segmenter('ko', { granularity: 'grapheme' });
+    return [...segmenter.segment(value)].length;
+  }
+  return Array.from(value).length;
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -16,55 +25,64 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setLoading(true);
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        try {
-          const userRef = doc(db, 'users', firebaseUser.uid);
-          const userDoc = await getDoc(userRef);
 
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            setProfile(data);
-            if (!data.nickname) setShowNicknameModal(true);
-          } else {
-            const initialData = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              nickname: '',
-              photoURL: firebaseUser.photoURL,
-              survival_time: 0,
-              status: 'ONLINE',
-              role: 'USER',
-              last_nickname_change: null,
-              created_at: serverTimestamp()
-            };
-            await setDoc(userRef, initialData);
-            setProfile(initialData);
-            setShowNicknameModal(true);
-          }
-        } catch (error) {
-          console.error("Firestore Access Error:", error);
-          // 데이터베이스 연결 실패 시 사용자 알림 로직 (선택적)
-        }
-      } else {
+      if (!firebaseUser) {
         setUser(null);
         setProfile(null);
+        setShowNicknameModal(false);
+        setLoading(false);
+        return;
       }
-      setLoading(false);
+
+      setUser(firebaseUser);
+
+      try {
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const userDoc = await getDoc(userRef);
+
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          setProfile(data);
+          setShowNicknameModal(!data.nickname);
+        } else {
+          const initialData = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            nickname: '',
+            photoURL: firebaseUser.photoURL,
+            survival_time: 0,
+            status: 'ONLINE',
+            role: 'USER',
+            last_nickname_change: null,
+            created_at: serverTimestamp(),
+          };
+
+          await setDoc(userRef, initialData);
+          setProfile(initialData);
+          setShowNicknameModal(true);
+        }
+      } catch (error) {
+        console.error('Firestore Access Error:', error);
+      } finally {
+        setLoading(false);
+      }
     });
+
     return () => unsubscribe();
   }, []);
 
-  // Real-time profile listener
   useEffect(() => {
     if (!user) return;
 
     const userRef = doc(db, 'users', user.uid);
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setProfile(docSnap.data());
-      }
+      if (!docSnap.exists()) return;
+
+      const nextProfile = docSnap.data();
+      setProfile(nextProfile);
+      setShowNicknameModal(!nextProfile.nickname);
     });
+
     return () => unsubscribe();
   }, [user]);
 
@@ -72,7 +90,7 @@ export const AuthProvider = ({ children }) => {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
-      console.error("Login Error:", error);
+      console.error('Login Error:', error);
     }
   };
 
@@ -80,52 +98,89 @@ export const AuthProvider = ({ children }) => {
 
   const updateNickname = async (newNickname) => {
     if (!user) {
-      throw new Error("로그인이 필요합니다.");
+      throw new Error('로그인이 필요합니다.');
     }
+
+    const normalizedNickname = String(newNickname || '').trim();
+    if (!normalizedNickname) {
+      throw new Error('별명을 입력해주세요.');
+    }
+
+    if (/[\r\n\t]/.test(normalizedNickname)) {
+      throw new Error('줄바꿈 또는 제어문자는 사용할 수 없습니다.');
+    }
+
+    const charLength = getCharacterLength(normalizedNickname);
+    if (charLength < 2 || charLength > 12) {
+      throw new Error('별명은 2자 이상 12자 이하로 설정해주세요.');
+    }
+
     const now = Date.now();
-    const cooldown = 24 * 60 * 60 * 1000; // 24시간
-    const lastChange = profile?.last_nickname_change?.toMillis ? profile.last_nickname_change.toMillis() : (profile?.last_nickname_change || 0);
+    const cooldownMs = 24 * 60 * 60 * 1000;
+    const lastChangeMs = profile?.last_nickname_change?.toMillis
+      ? profile.last_nickname_change.toMillis()
+      : Number(profile?.last_nickname_change || 0);
 
-    if (lastChange && (now - lastChange < cooldown)) {
-      const remaining = Math.ceil((cooldown - (now - lastChange)) / (60 * 60 * 1000));
-      throw new Error(`별명은 24시간마다 변경 가능합니다. (${remaining}시간 남음)`);
+    if (lastChangeMs && now - lastChangeMs < cooldownMs) {
+      const remainingHours = Math.ceil((cooldownMs - (now - lastChangeMs)) / (60 * 60 * 1000));
+      throw new Error(`별명은 24시간마다 변경할 수 있습니다. (${remainingHours}시간 남음)`);
     }
 
-    const nicknameRegex = /^[a-zA-Z0-9_가-힣]{2,12}$/;
-    if (!nicknameRegex.test(newNickname)) {
-      throw new Error("별명은 2~12자 한글, 영문, 숫자, 언더바(_)만 가능합니다.");
+    if (normalizedNickname === profile?.nickname) {
+      setShowNicknameModal(false);
+      return normalizedNickname;
     }
+
+    const previousProfile = profile;
+    const optimisticProfile = {
+      ...(profile || {}),
+      uid: user.uid,
+      email: user.email,
+      photoURL: profile?.photoURL || user.photoURL,
+      nickname: normalizedNickname,
+      last_nickname_change: now,
+    };
+
+    setProfile(optimisticProfile);
+    setShowNicknameModal(false);
 
     try {
       const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, {
-        nickname: newNickname,
-        last_nickname_change: serverTimestamp()
-      });
-      
-      // Immediately update local profile
-      setProfile(prev => ({ 
-        ...prev, 
-        nickname: newNickname,
-        last_nickname_change: now 
-      }));
-      
-      // Close nickname modal
-      setShowNicknameModal(false);
-      
-      console.log("✅ Nickname updated successfully:", newNickname);
+      await setDoc(
+        userRef,
+        {
+          uid: optimisticProfile.uid,
+          email: optimisticProfile.email,
+          photoURL: optimisticProfile.photoURL,
+          nickname: normalizedNickname,
+          last_nickname_change: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      return normalizedNickname;
     } catch (error) {
-      console.error("❌ Nickname update error:", error);
-      throw new Error(`별명 변경 실패: ${error.message}`);
+      setProfile(previousProfile || null);
+      setShowNicknameModal(!(previousProfile?.nickname));
+      console.error('Nickname update error:', error);
+      throw new Error(`별명 변경에 실패했습니다: ${error.message}`);
     }
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, profile, loading, loginWithGoogle, logout, 
-      updateNickname, showNicknameModal, setShowNicknameModal,
-      isAdmin: profile?.role === 'ADMIN'
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        loading,
+        loginWithGoogle,
+        logout,
+        updateNickname,
+        showNicknameModal,
+        setShowNicknameModal,
+        isAdmin: profile?.role === 'ADMIN',
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
