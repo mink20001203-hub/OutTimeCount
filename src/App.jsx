@@ -25,18 +25,6 @@ const DEMO_PATRONS = [
  * 위치: 대시보드 좌측 상단
  */
 const SystemStatus = ({ competitorCount, myRank }) => {
-  const [networkPing, setNetworkPing] = useState(45);
-  const [cpuLoad, setCpuLoad] = useState(32);
-  
-  // 게이지 애니메이션 (가짜 데이터)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNetworkPing(Math.floor(Math.random() * 100) + 20);
-      setCpuLoad(Math.floor(Math.random() * 80) + 10);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
   const getSecurityLevel = () => {
     // 보안 등급 (오늘의 경쟁자 수에 기반)
     if (competitorCount >= 50) return { level: 'CRITICAL', color: 'bg-red-500', percent: 100 };
@@ -51,52 +39,11 @@ const SystemStatus = ({ competitorCount, myRank }) => {
   return (
     <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[32px] p-6 backdrop-blur-sm shadow-[0_0_22px_rgba(0,255,148,0.08)] font-sans text-left">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="font-sans text-xs text-sentinel-green tracking-[0.14em] font-bold uppercase">시스템_상태</h3>
+        <h3 className="module-header-text text-sentinel-green">Module_01: 시스템_상태</h3>
         <LiveDot />
       </div>
       
       <div className="space-y-4">
-        {/* Title */}
-        <div className="text-left">
-          <h4 className="font-mono font-black text-2xl italic text-black dark:text-white tracking-tight mb-1">
-            디지털 센티넬
-          </h4>
-          <p className="text-xs text-gray-500 font-sans uppercase tracking-widest">시스템 상태 모니터</p>
-        </div>
-
-        {/* Network & CPU Gauges */}
-        <div className="grid grid-cols-2 gap-3">
-          {/* Network Ping */}
-          <div className="p-3 bg-sentinel-green/5 rounded-xl border border-sentinel-green/10">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[9px] text-gray-400 font-sans font-bold uppercase tracking-widest">핑</p>
-              <span className="text-xs font-mono font-black text-sentinel-green">{networkPing}ms</span>
-            </div>
-            <div className="w-full h-1.5 bg-black/10 dark:bg-white/5 rounded-full overflow-hidden">
-              <motion.div
-                animate={{ width: `${Math.max(20, Math.min(100, (networkPing / 100) * 100))}%` }}
-                transition={{ duration: 0.5 }}
-                className="h-full bg-sentinel-green rounded-full"
-              />
-            </div>
-          </div>
-
-          {/* CPU Load */}
-          <div className="p-3 bg-sentinel-green/5 rounded-xl border border-sentinel-green/10">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[9px] text-gray-400 font-sans font-bold uppercase tracking-widest">CPU</p>
-              <span className="text-xs font-mono font-black text-sentinel-green">{cpuLoad}%</span>
-            </div>
-            <div className="w-full h-1.5 bg-black/10 dark:bg-white/5 rounded-full overflow-hidden">
-              <motion.div
-                animate={{ width: `${cpuLoad}%` }}
-                transition={{ duration: 0.5 }}
-                className="h-full bg-sentinel-green rounded-full"
-              />
-            </div>
-          </div>
-        </div>
-
         {/* Competitor Count */}
         <div className="p-4 bg-sentinel-green/10 rounded-2xl border border-sentinel-green/20">
           <p className="text-xs text-gray-400 font-sans font-bold uppercase tracking-widest mb-2">오늘의 경쟁자</p>
@@ -122,14 +69,6 @@ const SystemStatus = ({ competitorCount, myRank }) => {
             />
           </div>
         </div>
-
-        {/* My Rank */}
-        <div className="p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-sentinel-green/10 text-center">
-          <p className="text-[10px] text-gray-500 font-sans uppercase tracking-widest font-bold mb-1">내 순위</p>
-          <p className="text-2xl font-mono font-black text-sentinel-green">
-            {myRank === 'PENDING...' ? '⏳' : `#${myRank}`}
-          </p>
-        </div>
       </div>
     </div>
   );
@@ -151,22 +90,23 @@ const SurvivalTimer = () => {
   }, []);
 
   return (
-    <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[32px] p-8 backdrop-blur-sm shadow-[0_0_22px_rgba(0,255,148,0.08)] font-sans text-left h-full flex flex-col justify-center items-center">
-      <div className="flex items-center justify-between w-full mb-6">
-        <h3 className="font-sans text-xs text-sentinel-green tracking-[0.14em] font-bold uppercase">생존_카운트</h3>
+    <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[32px] p-4 backdrop-blur-sm shadow-[0_0_22px_rgba(0,255,148,0.08)] font-sans text-left flex flex-col justify-center items-center">
+      <div className="flex items-center justify-between w-full mb-3">
+        <h3 className="module-header-text text-sentinel-green">Module_02: 생존_카운트</h3>
         <LiveDot />
       </div>
 
-      <div className="flex-1 flex flex-col justify-center items-center gap-4">
-        {/* Large Timer Display with Neon Glow */}
+      <div className="flex flex-col justify-center items-center gap-2">
+        {/* Timer Display - 70% size */}
         <div className="text-center">
           <div 
-            className={`text-7xl font-mono font-black italic tracking-tighter mb-2 transition-all duration-300 ${
+            className={`font-mono font-black italic tracking-tighter mb-1 transition-all duration-300 ${
               isActive 
                 ? 'text-sentinel-green animate-pulse' 
                 : 'text-gray-400'
             }`}
             style={{
+              fontSize: '33.6px',
               textShadow: isActive 
                 ? '0 0 10px rgba(0, 255, 148, 0.8), 0 0 20px rgba(0, 255, 148, 0.6), 0 0 30px rgba(0, 255, 148, 0.4), 0 0 40px rgba(0, 255, 148, 0.2)'
                 : 'none'
@@ -174,17 +114,17 @@ const SurvivalTimer = () => {
           >
             {formatTime(survivalTime)}
           </div>
-          <p className="text-xs text-gray-400 font-sans uppercase tracking-widest font-bold">실시간 생존 시간</p>
+          <p className="text-xs text-gray-400 font-sans uppercase tracking-widest font-bold">생존 시간</p>
         </div>
 
         {/* Sync Status */}
-        <div className="w-full pt-4 border-t border-sentinel-green/10">
+        <div className="w-full pt-2 border-t border-sentinel-green/10">
           <motion.div
             animate={{ opacity: [1, 0.5, 1] }}
             transition={{ repeat: Infinity, duration: 2 }}
-            className="text-center text-[10px] text-gray-500 font-sans uppercase tracking-widest font-bold px-3 py-2 bg-sentinel-green/5 rounded-xl border border-sentinel-green/10"
+            className="text-center text-[9px] text-gray-500 font-sans uppercase tracking-widest font-bold px-2 py-1 bg-sentinel-green/5 rounded-lg border border-sentinel-green/10"
           >
-            ☁️ 10초마다 데이터 클라우드 동기화 중...
+            ☁️ 동기화 중
           </motion.div>
         </div>
       </div>
@@ -900,13 +840,13 @@ const MinigameHub = () => {
 
 // Mock competitor data generator with preset demo data
 const generateMockCompetitors = () => {
-  // 발표 테스트용 가상 데이터
+  // 발표 테스트용 가상 데이터 (지정된 5명)
   const presetData = [
-    { nickname: 'Sentinel_01', survival_time: 9912, status: 'ONLINE' },
-    { nickname: 'NeonRiver', survival_time: 8645, status: 'ONLINE' },
-    { nickname: 'CipherFox', survival_time: 7534, status: 'OFFLINE' },
-    { nickname: 'OrbitZero', survival_time: 6723, status: 'ONLINE' },
-    { nickname: 'SignalBloom', survival_time: 5891, status: 'OFFLINE' },
+    { nickname: '본인', survival_time: 6264, status: 'ONLINE' },        // 01:44:44
+    { nickname: 'Sentinel_01', survival_time: 7815, status: 'ONLINE' },  // 02:10:15
+    { nickname: 'Alpha_Bravo', survival_time: 6900, status: 'ONLINE' },  // 01:55:00
+    { nickname: 'Cyber_Link', survival_time: 4830, status: 'ONLINE' },   // 01:20:30
+    { nickname: 'User_99', survival_time: 2712, status: 'OFFLINE' },     // 00:45:12
   ];
 
   return presetData.map((data, idx) => ({
@@ -936,7 +876,7 @@ const ShortcutGuide = ({ isOpen, onClose }) => {
           </div>
           <div className="flex justify-between items-center text-black dark:text-white text-left">
             <span className="text-gray-400 font-bold text-left">도움말</span>
-            <span className="bg-gray-100 dark:bg-white/10 px-3 py-1 rounded-lg border border-black/10 dark:border-white/10 font-black shadow-sm text-right">Shift + /</span>
+            <span className="bg-gray-100 dark:bg-white/10 px-3 py-1 rounded-lg border border-black/10 dark:border-white/10 font-black shadow-sm text-right">F1 / Alt + H</span>
           </div>
           <div className="flex justify-between items-center text-black dark:text-white text-left">
             <span className="text-gray-400 font-bold text-left">테마 전환</span>
@@ -1122,7 +1062,7 @@ const LeaderboardTable = ({ onRankUpdate, maxRank = 10 }) => {
         <thead>
           <tr className="bg-sentinel-green/5 border-b border-sentinel-green/10 shadow-sm sticky top-0">
             <th className="px-4 py-3 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 font-black italic shadow-sm text-left">순위</th>
-            <th className="px-4 py-3 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 font-black italic text-left shadow-sm">Nickname</th>
+            <th className="px-4 py-3 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 font-black italic text-left shadow-sm">닉네임</th>
             <th className="px-4 py-3 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 text-center font-black italic shadow-sm">상태</th>
             <th className="px-4 py-3 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 text-right font-black italic shadow-sm">생존</th>
           </tr>
@@ -1147,7 +1087,7 @@ const LeaderboardTable = ({ onRankUpdate, maxRank = 10 }) => {
                     }}
                     exit={{ opacity: 0 }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    className={`border-b border-sentinel-green/5 group transition-colors hover:bg-sentinel-green/5 dark:hover:bg-sentinel-green/10 shadow-sm ${isMe ? 'ring-1 ring-inset ring-sentinel-green/20 shadow-[0_0_15px_rgba(0,255,148,0.05)]' : ''}`}
+                    className={`border-b border-sentinel-green/5 group transition-all duration-300 hover:bg-sentinel-green/15 dark:hover:bg-sentinel-green/20 hover:shadow-[0_0_20px_rgba(0,255,148,0.3)] shadow-sm ${isMe ? 'ring-1 ring-inset ring-sentinel-green/20 shadow-[0_0_15px_rgba(0,255,148,0.05)]' : ''}`}
                   >
                     <td className="px-4 py-3 font-mono font-black text-lg text-sentinel-green flex items-center gap-2 tracking-tighter shadow-sm text-left">
                       {index === 0 ? <span className="text-xl drop-shadow-lg shadow-sm">🥇</span> : `#${String(index + 1).padStart(2, '0')}`}
@@ -1156,8 +1096,8 @@ const LeaderboardTable = ({ onRankUpdate, maxRank = 10 }) => {
                       <div className="flex items-center gap-2 text-left shadow-sm">
                         <img src={comp.photoURL || 'https://via.placeholder.com/32'} className="w-6 h-6 rounded-full border border-sentinel-green/10 shadow-sm flex-shrink-0" />
                         <div className="text-left min-w-0">
-                          <div className={`font-sans font-bold text-xs leading-tight text-left shadow-sm truncate ${isMe ? 'text-sentinel-green font-black' : 'text-black dark:text-white'}`}>
-                            {comp.nickname || 'Unknown'}
+                          <div className={`font-sans font-bold text-sm leading-tight text-left shadow-sm truncate ${isMe ? 'text-sentinel-green font-black' : 'text-black dark:text-white'}`}>
+                            {comp.nickname || '알 수 없음'}
                             {isMe && <span className="ml-1 text-[7px] bg-sentinel-green/20 px-1 py-0.5 rounded uppercase tracking-tighter font-black font-sans shadow-sm">나</span>}
                           </div>
                         </div>
@@ -1171,7 +1111,7 @@ const LeaderboardTable = ({ onRankUpdate, maxRank = 10 }) => {
                         {comp.status === 'ONLINE' ? '온' : '오프'}
                       </span>
                     </td>
-                    <td className={`px-4 py-3 text-right font-mono font-bold text-xs tracking-widest italic shadow-sm text-right ${isMe ? 'text-sentinel-green drop-shadow-[0_0_8px_rgba(0,255,148,0.4)]' : 'text-black dark:text-white'}`}>
+                    <td className={`px-4 py-3 text-right font-mono font-bold text-sm tracking-widest italic shadow-sm text-right ${isMe ? 'text-sentinel-green drop-shadow-[0_0_8px_rgba(0,255,148,0.4)]' : 'text-black dark:text-white'}`}>
                       {formatTime(comp.survival_time || 0)}
                     </td>
                   </motion.tr>
@@ -1278,14 +1218,14 @@ const Chat = () => {
   };
 
   return (
-    <aside className="monitoring-panel w-full h-full flex min-h-0 flex-1 flex-col bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg font-sans text-left">
-      <div className="p-6 border-b border-sentinel-green/10 bg-sentinel-green/5 flex items-center justify-between shadow-sm shadow-xl shadow-sm">
+    <aside className="w-full h-full flex flex-col bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg font-sans text-left">
+      <div className="p-4 border-b border-sentinel-green/10 bg-sentinel-green/5 flex items-center justify-between shadow-sm shadow-xl shadow-sm flex-shrink-0">
         <h3 className="font-sans font-black text-xs tracking-widest flex items-center gap-2 uppercase italic text-sentinel-green font-headline tracking-tight text-left">
           라이브 채널
         </h3>
         <LiveDot />
       </div>
-      <div ref={scrollRef} className="chat-scroll-area min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-2 space-y-4 text-left shadow-inner">
+      <div className="flex-1 overflow-y-auto px-6 pt-4 pb-2 space-y-4 text-left shadow-inner">
         {messages.map(msg => (
           <div key={msg.id} className="space-y-1.5 text-left">
             <div className="flex items-center justify-between gap-3 text-left">
@@ -1302,7 +1242,7 @@ const Chat = () => {
         <div ref={messagesEndRef} />
       </div>
       {(spamWarning || chatError) && (
-        <div className={`px-6 py-2 border-t font-sans font-medium text-center text-xs animate-pulse ${
+        <div className={`px-4 py-2 border-t font-sans font-medium text-center text-xs animate-pulse flex-shrink-0 ${
           spamWarning 
             ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-600 dark:text-yellow-400' 
             : 'bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400'
@@ -1310,7 +1250,7 @@ const Chat = () => {
           {spamWarning ? '⏳ ' + spamWarning : '❌ ' + chatError}
         </div>
       )}
-      <div className="shrink-0 p-6 bg-sentinel-green/5 border-t border-sentinel-green/10 backdrop-blur-md shadow-xl shadow-sm">
+      <div className="shrink-0 p-4 bg-sentinel-green/5 border-t border-sentinel-green/10 backdrop-blur-md shadow-xl shadow-sm">
         {user ? (
           <form onSubmit={sendMessage} className="flex gap-2">
             <input 
@@ -1327,7 +1267,7 @@ const Chat = () => {
           </form>
         ) : (
           <div className="text-center py-2 text-center shadow-sm">
-            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest mb-3 italic font-black opacity-60 font-sans text-center">메시지를 보내려면 로그인이 필요합니다.</p>
+            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest mb-3 italic font-black opacity-60 font-sans text-center">로그인이 필요합니다</p>
             <button onClick={() => window.scrollTo(0, 0)} className="w-full bg-black dark:bg-sentinel-green dark:text-black text-sentinel-green py-3 rounded-xl font-mono font-black text-[10px] uppercase border border-sentinel-green/20 hover:bg-sentinel-green hover:text-black transition-all shadow-lg font-headline shadow-xl text-center shadow-xl">로그인하러 가기</button>
           </div>
         )}
@@ -1439,8 +1379,9 @@ function App() {
         setIsTerminalOpen(p => !p);
       }
 
-      // Shift + /: shortcut guide
-      if (e.shiftKey && e.key === '?') {
+      // F1 또는 Alt + H: shortcut guide
+      if (e.key === 'F1' || (e.altKey && e.key.toUpperCase() === 'H')) {
+        e.preventDefault();
         setIsGuideOpen(p => !p);
       }
 
@@ -1500,10 +1441,10 @@ function App() {
             </div>
             <div className="text-center shadow-sm">
               <p className="mb-3 text-[11px] font-sans font-bold uppercase tracking-[0.28em] text-sentinel-green">
-                {isTerminated ? 'Rule 04' : 'Rule 03'}
+                {isTerminated ? '규칙 04' : '규칙 03'}
               </p>
               <h2 className="text-3xl font-sans font-bold mb-2 tracking-[-0.03em] text-black dark:text-white drop-shadow-sm shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm">
-                {isTerminated ? 'Session Terminated' : 'Another Session Detected'}
+                {isTerminated ? '세션 종료됨' : '다른 세션이 실행 중입니다'}
               </h2>
               <p className="text-gray-400 font-sans text-[12px] leading-relaxed whitespace-pre-line font-medium opacity-90 shadow-sm">
                 {isTerminated 
@@ -1526,7 +1467,7 @@ function App() {
       <header className="fixed top-0 left-0 w-full z-[100] px-6 py-4 flex justify-between items-center pointer-events-none shadow-sm shadow-sm">
         <div className="pointer-events-auto shadow-sm">
           <div className="bg-black dark:bg-sentinel-green text-sentinel-green dark:text-black font-mono font-black px-4 py-2 rounded-xl text-xs uppercase tracking-tighter italic shadow-2xl shadow-xl font-headline tracking-tight shadow-sm text-left shadow-sm">
-            Sentinel v2.4
+            센티넬 v2.4
           </div>
         </div>
         <div className="pointer-events-auto flex items-center gap-3 shadow-xl shadow-xl shadow-sm shadow-sm">
@@ -1608,7 +1549,7 @@ function App() {
 
             {/* Right Column: Communication (Module 04) */}
             <div
-              className="lg:col-span-4 h-full flex min-h-0 self-stretch flex-col space-y-1.5 overflow-hidden font-sans text-left text-left text-left text-left text-left text-left shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm"
+              className="lg:col-span-4 flex flex-col space-y-1.5 overflow-hidden font-sans text-left text-left text-left text-left text-left text-left shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm"
               style={module04Height ? { height: `${module04Height}px`, maxHeight: `${module04Height}px` } : undefined}
             >
               <div className="flex items-center justify-between px-2 text-left text-left text-left text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
@@ -1618,7 +1559,9 @@ function App() {
                   <div className="w-2 h-2 bg-sentinel-green rounded-full animate-pulse shadow-[0_0_8px_rgba(0,255,148,0.8)]"></div>
                 </div>
               </div>
-              <Chat />
+              <div className="flex-1 overflow-hidden">
+                <Chat />
+              </div>
             </div>
           </div>
         </motion.div>
@@ -1629,7 +1572,7 @@ function App() {
             <div className="w-24 h-24 bg-black dark:bg-sentinel-green rounded-[32px] mx-auto flex items-center justify-center mb-10 shadow-2xl rotate-6 transition-transform hover:rotate-12 duration-500 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
               <span className="text-4xl dark:grayscale drop-shadow-xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">!</span>
             </div>
-            <h2 className="text-4xl font-mono font-black mb-4 uppercase italic tracking-tighter text-black dark:text-white italic tracking-tight font-headline shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-center shadow-sm">DIGITAL SENTINEL</h2>
+            <h2 className="text-4xl font-mono font-black mb-4 uppercase italic tracking-tighter text-black dark:text-white italic tracking-tight font-headline shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-center shadow-sm">디지털 센티넬</h2>
             <p className="text-gray-500 dark:text-gray-400 font-sans text-base uppercase tracking-[0.3em] mb-12 leading-relaxed italic font-black opacity-80 text-center">접근 권한이 필요합니다<br/>보안 프로토콜을 초기화하세요</p>
             <button
               className="w-full py-5 bg-black dark:bg-sentinel-green dark:text-black hover:bg-sentinel-green dark:hover:bg-sentinel-green/80 text-white hover:text-black font-mono font-black text-sm rounded-[24px] transition-all duration-500 uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.1)] hover:shadow-sentinel-green/30 active:scale-95 font-headline shadow-lg shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm text-center shadow-xl shadow-xl shadow-xl"
