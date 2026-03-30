@@ -760,15 +760,10 @@ function App() {
   useEffect(() => {
     if (user) {
       setShowSplash(true);
+      const timer = setTimeout(() => setShowSplash(false), 5000);
+      return () => clearTimeout(timer);
     }
   }, [user]);
-
-  const { showNicknameModal } = useAuth();
-  useEffect(() => {
-    if (!showNicknameModal && user) {
-      setShowSplash(false);
-    }
-  }, [showNicknameModal, user]);
 
   useEffect(() => {
     const fetchStats = async () => {
