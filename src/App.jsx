@@ -102,17 +102,22 @@ const ProfileModal = ({ isOpen, onClose }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleUpdateNickname = async () => {
+    if (!nickname.trim()) {
+      setError('별명을 입력해주세요.');
+      setIsSubmitting(false);
+      return;
+    }
+    
     setError('');
     setSuccess('');
     setIsSubmitting(true);
     try {
-      await updateNickname(nickname);
+      await updateNickname(nickname.trim());
       setSuccess('별명이 성공적으로 업데이트되었습니다');
       setTimeout(() => setSuccess(''), 3000);
       setTimeout(() => onClose(), 1500);
     } catch (err) {
       setError(err.message);
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -138,25 +143,26 @@ const ProfileModal = ({ isOpen, onClose }) => {
         
         <div className="space-y-6">
           <div className="space-y-3">
-            <label className="block text-sm font-bold mb-2 text-black dark:text-white font-sans">별명 변경</label>
+            <label className="block text-base font-semibold mb-3 text-black dark:text-white font-sans">별명 변경</label>
             <input 
               type="text" 
               value={nickname}
               onChange={e => setNickname(e.target.value)}
-              className="w-full px-4 py-4 bg-black/5 dark:bg-black/40 border border-sentinel-green/10 rounded-xl text-black dark:text-white placeholder:text-gray-400 font-sans text-base focus:ring-1 focus:ring-sentinel-green/50 outline-none transition-all"
+              maxLength="12"
+              className="w-full px-4 py-4 bg-black/5 dark:bg-black/40 border border-sentinel-green/10 rounded-xl text-black dark:text-white placeholder:text-gray-400 font-sans text-base font-medium focus:ring-1 focus:ring-sentinel-green/50 outline-none transition-all"
               placeholder="새 별명 (2~12자)"
               disabled={isSubmitting}
             />
-            <p className="text-sm text-gray-500 mt-1 font-sans">한글/영문/숫자/_, 2~12자</p>
+            <p className="text-sm font-medium text-gray-500 mt-2 font-sans">한글/영문/숫자/_, 2~12자</p>
             {error && (
               <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <p className="text-red-500 text-xs font-bold font-sans">{error}</p>
+                <p className="text-red-500 text-sm font-semibold font-sans">{error}</p>
               </div>
             )}
             <button 
               onClick={handleUpdateNickname} 
               disabled={isSubmitting}
-              className="mt-3 w-full py-4 bg-sentinel-green text-black font-mono font-black text-sm uppercase tracking-widest rounded-xl hover:opacity-90 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="mt-4 w-full py-4 bg-sentinel-green text-black font-mono font-black text-base uppercase tracking-widest rounded-xl hover:opacity-90 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? '업데이트 중...' : '별명 변경'}
             </button>
@@ -1001,11 +1007,14 @@ function App() {
                   <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm shadow-sm shadow-sm">Module_02: 생존_카운트</h3>
                   <LiveDot />
                 </div>
-                <div className="flex flex-col justify-center py-2 text-left text-left text-left shadow-sm shadow-sm overflow-hidden">
-                  <p className={`font-mono text-5xl md:text-6xl font-black tracking-[0.2em] glow-green drop-shadow-2xl italic transition-all duration-300 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm break-words ${bonusPulse ? 'text-white scale-110 shadow-[0_0_30px_rgba(0,255,148,0.6)] shadow-xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm' : 'text-sentinel-green shadow-sm shadow-sm'}`}>
+                <div className="flex flex-col justify-center py-2 text-left text-left text-left shadow-sm shadow-sm overflow-visible">
+                  <p 
+                    className={`font-mono font-black tracking-[0.2em] glow-green drop-shadow-2xl italic transition-all duration-300 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm whitespace-nowrap ${bonusPulse ? 'text-white scale-110 shadow-[0_0_30px_rgba(0,255,148,0.6)] shadow-xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm' : 'text-sentinel-green shadow-sm shadow-sm'}`}
+                    style={{fontSize: 'clamp(2.5rem, 8vw, 4rem)'}}
+                  >
                     {formatTime(survivalTime)}
                   </p>
-                  <p className="font-mono text-sm text-gray-400 dark:text-gray-500 mt-4 uppercase tracking-[0.2em] font-black font-sans italic opacity-60 font-black italic font-sans italic opacity-60 shadow-sm shadow-sm shadow-sm text-left shadow-sm shadow-sm leading-tight">10초마다 데이터 클라우드 동기화 중...</p>
+                  <p className="font-sans font-medium text-sm text-gray-400 dark:text-gray-500 mt-4 uppercase tracking-[0.2em] opacity-60 shadow-sm shadow-sm shadow-sm text-left shadow-sm shadow-sm leading-tight">10초마다 데이터 클라우드 동기화 중...</p>
                 </div>
               </div>
             </div>

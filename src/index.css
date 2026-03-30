@@ -38,6 +38,29 @@ body {
     @apply absolute inline-flex h-full w-full animate-ping rounded-full bg-sentinel-green opacity-75;
     content: "";
   }
+  
+  /* Typography standardization for Noto Sans KR */
+  * {
+    -webkit-text-rendering: optimizeLegibility;
+    -moz-text-rendering: optimizeLegibility;
+    text-rendering: optimizeLegibility;
+  }
+  
+  /* Regular body text: font-weight 400 */
+  p, span, button, label, input, textarea {
+    font-family: 'Noto Sans KR', 'Inter', 'Pretendard', system-ui, sans-serif;
+    font-weight: 400;
+  }
+  
+  /* Medium emphasis text: font-weight 500 */
+  .font-medium, .font-semibold, strong, b, .font-bold {
+    font-family: 'Noto Sans KR', 'Inter', 'Pretendard', system-ui, sans-serif;
+  }
+  
+  /* Monospace only for code/timer numbers */
+  .font-mono, code, pre {
+    font-family: 'JetBrains Mono', monospace;
+  }
 }
 
 @keyframes pulse-light {
