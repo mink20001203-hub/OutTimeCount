@@ -842,18 +842,23 @@ const Chat = () => {
   const { user, profile, isAdmin } = useAuth();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const scrollRef = useRef();
+  const scrollRef = useRef(null);
+  const messagesEndRef = useRef(null);
 
   useEffect(() => {
     const q = query(collection(db, 'messages'), orderBy('timestamp', 'asc'), limit(50));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
     }, (error) => {
       console.error("Chat Snapshot Error:", error);
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!messages.length) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages]);
 
   const sendMessage = async (e) => {
     e.preventDefault();
@@ -870,39 +875,40 @@ const Chat = () => {
   };
 
   return (
-    <aside className="w-full lg:w-80 flex flex-col bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden h-full backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg font-sans text-left">
+    <aside className="w-full flex min-h-0 flex-1 flex-col bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg font-sans text-left">
       <div className="p-6 border-b border-sentinel-green/10 bg-sentinel-green/5 flex items-center justify-between shadow-sm shadow-xl shadow-sm">
         <h3 className="font-mono font-black text-xs tracking-tighter flex items-center gap-2 uppercase italic text-sentinel-green font-headline tracking-tight text-left">
           라이브 채널
         </h3>
         <LiveDot />
       </div>
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide text-left shadow-inner">
+      <div ref={scrollRef} className="chat-scroll-area min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-4 space-y-5 text-left shadow-inner">
         {messages.map(msg => (
-          <div key={msg.id} className="space-y-1 text-left">
-            <div className="flex items-center justify-between text-left">
-              <span className={`font-mono text-[9px] font-black uppercase tracking-tighter ${msg.role === 'ADMIN' ? 'text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)]' : 'text-sentinel-green'} text-left`}>{msg.nickname}</span>
-              <span className="font-mono text-[8px] text-gray-500 font-bold opacity-60 font-sans text-right">{(msg.timestamp?.toMillis ? new Date(msg.timestamp.toMillis()) : new Date()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+          <div key={msg.id} className="space-y-1.5 text-left">
+            <div className="flex items-center justify-between gap-3 text-left">
+              <span className={`font-sans text-[11px] font-bold tracking-[-0.02em] ${msg.role === 'ADMIN' ? 'text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)]' : 'text-sentinel-green'} text-left`}>{msg.nickname}</span>
+              <span className="font-sans text-[10px] text-gray-500 font-medium opacity-70 tabular-nums text-right">{(msg.timestamp?.toMillis ? new Date(msg.timestamp.toMillis()) : new Date()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
             </div>
-            <p className={`p-3 rounded-2xl text-xs leading-relaxed border font-sans font-black shadow-sm ${
-              msg.role === 'ADMIN' ? 'bg-red-500/10 border-red-500/20 text-red-500 font-bold shadow-sm' : 'bg-black/20 dark:bg-black/40 border-sentinel-green/5 text-gray-700 dark:text-gray-300 shadow-sm'
+            <p className={`rounded-2xl border px-3 py-3 text-[13px] leading-[1.55] font-sans font-medium shadow-sm ${
+              msg.role === 'ADMIN' ? 'bg-red-500/10 border-red-500/20 text-red-500' : 'bg-black/20 dark:bg-black/40 border-sentinel-green/5 text-gray-700 dark:text-gray-300'
             }`}>
               {msg.text}
             </p>
           </div>
         ))}
+        <div ref={messagesEndRef} />
       </div>
-      <div className="p-6 bg-sentinel-green/5 border-t border-sentinel-green/10 shadow-xl shadow-sm">
+      <div className="sticky bottom-0 z-10 p-6 bg-sentinel-green/5 border-t border-sentinel-green/10 backdrop-blur-md shadow-xl shadow-sm">
         {user ? (
           <form onSubmit={sendMessage} className="flex gap-2">
             <input 
               value={input} onChange={e => setInput(e.target.value)}
-              className="flex-1 bg-black/10 dark:bg-black/40 border border-sentinel-green/20 px-4 py-3 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-sentinel-green/50 transition-all font-mono text-black dark:text-white placeholder:text-gray-400 font-black shadow-inner"
-              placeholder="BROADCAST_MSG..."
+              className="flex-1 bg-black/10 dark:bg-black/40 border border-sentinel-green/20 px-4 py-3 rounded-xl text-[13px] focus:outline-none focus:ring-1 focus:ring-sentinel-green/50 transition-all font-sans text-black dark:text-white placeholder:text-gray-400 font-medium shadow-inner"
+              placeholder="메시지를 입력하세요"
             />
             <button 
               type="submit"
-              className="px-4 py-2 bg-black dark:bg-sentinel-green text-sentinel-green dark:text-black font-sans font-black text-[10px] uppercase tracking-tighter rounded-xl border border-sentinel-green/30 hover:shadow-[0_0_15px_rgba(0,255,148,0.3)] transition-all font-bold"
+              className="shrink-0 px-4 py-2 bg-black dark:bg-sentinel-green text-sentinel-green dark:text-black font-sans font-bold text-[11px] uppercase tracking-tight rounded-xl border border-sentinel-green/30 hover:shadow-[0_0_15px_rgba(0,255,148,0.3)] transition-all"
             >
               전송
             </button>
@@ -1096,10 +1102,10 @@ function App() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.8, delay: !showNicknameModal ? 0.3 : 0 }}
-          className="max-w-7xl mx-auto px-4 pt-24 pb-12 grid grid-cols-1 lg:grid-cols-12 gap-8 min-h-screen text-left text-left text-left text-left shadow-sm"
+          className="max-w-7xl mx-auto px-4 pt-24 pb-12 grid grid-cols-1 lg:grid-cols-12 items-stretch gap-8 min-h-screen text-left text-left text-left text-left shadow-sm"
         >
           {/* Left Column */}
-          <div className="lg:col-span-8 space-y-8 text-left text-left shadow-sm">
+          <div className="lg:col-span-8 space-y-8 self-stretch text-left text-left shadow-sm">
             {/* Modules Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left text-left text-left text-left shadow-sm shadow-sm">
               {/* Module 1: Status */}
@@ -1138,10 +1144,10 @@ function App() {
                   <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm shadow-sm shadow-sm">Module_02: 생존_카운트</h3>
                   <LiveDot />
                 </div>
-                <div className="flex flex-col justify-center items-center py-2 text-center text-center text-center shadow-sm shadow-sm overflow-visible">
+                <div className="flex min-w-0 flex-col justify-center items-center py-2 text-center text-center text-center shadow-sm shadow-sm overflow-visible">
                   <p 
-                    className={`font-mono font-black tracking-wider glow-green drop-shadow-2xl italic transition-all duration-300 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm whitespace-nowrap ${bonusPulse ? 'text-white scale-110 shadow-[0_0_30px_rgba(0,255,148,0.6)] shadow-xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm' : 'text-sentinel-green shadow-sm shadow-sm'}`}
-                    style={{fontSize: 'clamp(1.8rem, 6.5vw, 3rem)', letterSpacing: '-0.02em'}}
+                    className={`font-mono tabular-nums font-black tracking-[0.02em] leading-none glow-green drop-shadow-2xl italic transition-all duration-300 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm whitespace-nowrap ${bonusPulse ? 'text-white scale-110 shadow-[0_0_30px_rgba(0,255,148,0.6)] shadow-xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm' : 'text-sentinel-green shadow-sm shadow-sm'}`}
+                    style={{fontSize: 'clamp(1.7rem, 5.6vw, 2.85rem)', letterSpacing: '-0.03em'}}
                   >
                     {formatTime(survivalTime)}
                   </p>
@@ -1169,7 +1175,7 @@ function App() {
           </div>
 
           {/* Right Column: Communication */}
-          <div className="lg:col-span-4 h-full flex flex-col space-y-4 font-sans text-left text-left text-left text-left text-left text-left shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm">
+          <div className="lg:col-span-4 flex min-h-0 self-stretch flex-col space-y-4 font-sans text-left text-left text-left text-left text-left text-left shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm">
             <div className="flex items-center justify-between px-2 text-left text-left text-left text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
               <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Module_04: 시스템_통신</h3>
               <span className="font-mono text-[9px] text-sentinel-green/60 uppercase italic font-headline tracking-widest opacity-60 italic italic italic italic italic italic italic italic shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-right shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Secure Link Active</span>

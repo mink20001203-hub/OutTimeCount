@@ -15,6 +15,10 @@ body {
   font-family: 'Noto Sans KR', 'Inter', 'Pretendard', system-ui, -apple-system, sans-serif;
 }
 
+#root {
+  min-height: 100vh;
+}
+
 body {
   @apply bg-white text-black transition-colors duration-300;
 }
@@ -109,4 +113,12 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #aaa;
+}
+
+.chat-scroll-area {
+  scrollbar-gutter: stable;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
