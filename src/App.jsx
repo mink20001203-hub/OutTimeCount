@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTimer } from './context/TimerContext';
 import { useAuth } from './context/AuthContext';
 import { db } from './firebase';
@@ -800,56 +800,101 @@ const NicknameModal = () => {
   );
 };
 
-const LeaderboardTable = ({ onRankUpdate }) => {
+const LeaderboardTable = ({ onRankUpdate, maxRank = 10 }) => {
   const { formatTime } = useTimer();
   const { user } = useAuth();
   const [competitors, setCompetitors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [useMockData, setUseMockData] = useState(false);
+  const [error, setError] = useState(null);
   const mockDataRef = useRef(null);
+  const unsubscribeRef = useRef(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'users'), orderBy('survival_time', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      // Use mock data only if actual competitors are empty
-      if (data.length === 0) {
-        // Generate mock data only once
-        if (!mockDataRef.current) {
-          mockDataRef.current = generateMockCompetitors();
-        }
-        setCompetitors(mockDataRef.current);
-        setUseMockData(true);
-      } else {
-        // If real data exists, stop using mock data
-        mockDataRef.current = null;
-        setCompetitors(data.slice(0, 10));
-        setUseMockData(false);
-      }
-      
-      if (user) {
-        const index = data.findIndex(u => u.id === user.uid);
-        onRankUpdate && onRankUpdate(index !== -1 ? index + 1 : 'PENDING...', data.length);
-      }
+    if (!user) {
       setLoading(false);
-    }, (error) => {
-      console.error("Leaderboard Snapshot Error:", error);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [user, onRankUpdate]);
+      return;
+    }
+
+    // 기존 리스너 정리
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+    }
+
+    // 실시간 순위 업데이트 리스너
+    const setupLeaderboardListener = () => {
+      try {
+        const q = query(collection(db, 'users'), orderBy('survival_time', 'desc'));
+        unsubscribeRef.current = onSnapshot(q, (snapshot) => {
+          const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          
+          // 데이터가 없으면 모의 데이터 사용
+          if (data.length === 0) {
+            if (!mockDataRef.current) {
+              mockDataRef.current = generateMockCompetitors();
+            }
+            setCompetitors(mockDataRef.current.slice(0, maxRank));
+            setUseMockData(true);
+          } else {
+            mockDataRef.current = null;
+            setCompetitors(data.slice(0, maxRank));
+            setUseMockData(false);
+          }
+          
+          // 사용자 순위 업데이트 (콜백은 useCallback으로 메모이제이션됨)
+          if (user && onRankUpdate) {
+            const index = data.findIndex(u => u.id === user.uid);
+            onRankUpdate(index !== -1 ? index + 1 : 'PENDING...', data.length);
+          }
+          
+          setLoading(false);
+          setError(null);
+        }, (error) => {
+          console.error("Leaderboard Snapshot Error:", error);
+          // Quota exceeded 에러 처리
+          if (error.code === 'resource-exhausted' || error.message?.includes('429')) {
+            setError('데이터 로드 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+            setLoading(false);
+            // 5초 후 재시도
+            setTimeout(() => setupLeaderboardListener(), 5000);
+          } else {
+            setError('데이터를 불러올 수 없습니다.');
+            setLoading(false);
+          }
+        });
+      } catch (err) {
+        console.error("Setup Leaderboard Listener Error:", err);
+        setError('시스템 오류가 발생했습니다.');
+        setLoading(false);
+      }
+    };
+
+    setupLeaderboardListener();
+
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
+    };
+  }, [user]); // user만 의존성으로 설정
 
   return (
-    <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg h-full font-sans text-left">
+    <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg h-full font-sans text-left flex flex-col">
       {useMockData && (
-        <div className="bg-sentinel-green/10 border-b border-sentinel-green/20 px-8 py-3">
-          <p className="text-xs font-mono text-sentinel-green font-black uppercase tracking-widest italic">
-            데모 모드 - 시뮬레이션 리더보드
+        <div className="bg-sentinel-green/10 border-b border-sentinel-green/20 px-4 py-2 flex-shrink-0">
+          <p className="text-xs font-sans text-sentinel-green font-black uppercase tracking-widest italic">
+            📊 데모 모드
           </p>
         </div>
       )}
-      <table className="w-full text-left border-collapse shadow-sm">
+      {error && (
+        <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2 flex-shrink-0">
+          <p className="text-xs font-sans text-red-500 font-bold">
+            ⚠️ {error}
+          </p>
+        </div>
+      )}
+      <table className="w-full text-left border-collapse shadow-sm flex-1 overflow-auto">
         <thead>
           <tr className="bg-sentinel-green/5 border-b border-sentinel-green/10 shadow-sm">
             <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 font-black italic shadow-sm text-left">순위</th>
@@ -858,7 +903,7 @@ const LeaderboardTable = ({ onRankUpdate }) => {
             <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 text-right font-black italic shadow-sm">생존 시간</th>
           </tr>
         </thead>
-        <tbody className="relative min-h-[400px] text-left">
+        <tbody className="relative min-h-[200px] text-left">
           <AnimatePresence mode="popLayout">
             {competitors.length > 0 ? (
               competitors.map((comp, index) => {
@@ -927,18 +972,41 @@ const Chat = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [spamWarning, setSpamWarning] = useState('');
+  const [chatError, setChatError] = useState(null);
   const scrollRef = useRef(null);
   const messagesEndRef = useRef(null);
   const lastMessageRef = useRef({ text: '', timestamp: 0 });
+  const unsubscribeRef = useRef(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'messages'), orderBy('timestamp', 'asc'), limit(50));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (error) => {
-      console.error("Chat Snapshot Error:", error);
-    });
-    return () => unsubscribe();
+    const setupChatListener = () => {
+      try {
+        const q = query(collection(db, 'messages'), orderBy('timestamp', 'asc'), limit(50));
+        unsubscribeRef.current = onSnapshot(q, (snapshot) => {
+          setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+          setChatError(null);
+        }, (error) => {
+          console.error("Chat Snapshot Error:", error);
+          // Quota exceeded 또는 권한 에러 처리
+          if (error.code === 'resource-exhausted' || error.code === 'permission-denied') {
+            setChatError('메시지를 로드할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+            // 5초 후 재시도
+            setTimeout(() => setupChatListener(), 5000);
+          }
+        });
+      } catch (err) {
+        console.error("Setup Chat Listener Error:", err);
+        setChatError('채팅 시스템 오류가 발생했습니다.');
+      }
+    };
+
+    setupChatListener();
+
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -968,8 +1036,18 @@ const Chat = () => {
       lastMessageRef.current = { text: trimmedInput, timestamp: now };
       setInput('');
       setSpamWarning('');
+      setChatError(null);
     } catch (error) {
       console.error("Send Message Error:", error);
+      // Quota exceeded 에러 처리
+      if (error.code === 'resource-exhausted' || error.message?.includes('429')) {
+        setChatError('요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.');
+      } else if (error.code === 'permission-denied') {
+        setChatError('메시지를 보낼 권한이 없습니다.');
+      } else {
+        setChatError('메시지 전송 중 오류가 발생했습니다.');
+      }
+      setTimeout(() => setChatError(null), 4000);
     }
   };
 
@@ -997,9 +1075,13 @@ const Chat = () => {
         ))}
         <div ref={messagesEndRef} />
       </div>
-      {spamWarning && (
-        <div className="px-6 py-2 bg-yellow-500/10 border-t border-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-xs font-sans font-medium text-center animate-pulse">
-          {spamWarning}
+      {(spamWarning || chatError) && (
+        <div className={`px-6 py-2 border-t font-sans font-medium text-center text-xs animate-pulse ${
+          spamWarning 
+            ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-600 dark:text-yellow-400' 
+            : 'bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400'
+        }`}>
+          {spamWarning || chatError}
         </div>
       )}
       <div className="shrink-0 p-6 bg-sentinel-green/5 border-t border-sentinel-green/10 backdrop-blur-md shadow-xl shadow-sm">
@@ -1088,9 +1170,10 @@ function App() {
     fetchStats();
   }, []);
 
-  const handleRankUpdate = (rank, count) => {
+  // handleRankUpdate를 useCallback으로 메모이제이션하여 불필요한 의존성 재생성 방지
+  const handleRankUpdate = useCallback((rank, count) => {
     setCompetitorStats({ count, myRank: rank });
-  };
+  }, []);
 
   const handleDonationSuccessFlow = () => {
     setDonationPopupStep(1);
@@ -1267,77 +1350,27 @@ function App() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.8, delay: !showNicknameModal ? 0.3 : 0 }}
-          className="max-w-7xl mx-auto px-4 pt-24 pb-12 grid grid-cols-1 lg:grid-cols-12 items-stretch gap-8 min-h-screen text-left text-left text-left text-left shadow-sm"
+          className="max-w-7xl mx-auto px-4 pt-24 pb-12 grid grid-cols-1 lg:grid-cols-12 items-stretch gap-6 min-h-screen text-left text-left text-left text-left shadow-sm"
         >
-          {/* Left Column */}
-          <div ref={leftModulesRef} className="lg:col-span-8 space-y-8 self-stretch text-left text-left shadow-sm">
-            {/* Modules Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left text-left text-left text-left shadow-sm shadow-sm">
-              {/* Module 1: Status */}
-              <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[32px] p-8 backdrop-blur-sm relative overflow-hidden group shadow-glow-green dark:shadow-glow-green-lg transition-all hover:shadow-glow-green/50 text-left font-sans text-left">
-                <div className="flex justify-between items-start mb-6 text-left shadow-sm">
-                  <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm">Module_01: 시스템_상태</h3>
-                  <LiveDot />
-                </div>
-                <h1 className="text-4xl font-mono font-black tracking-tighter uppercase italic text-black dark:text-white mb-2 font-headline text-left shadow-sm">Digital Sentinel</h1>
-                <div className="flex flex-wrap items-center gap-4 text-left text-left text-left shadow-sm shadow-sm">
-                  <p className="font-sans text-xs text-gray-500 uppercase tracking-widest font-black opacity-80 font-bold text-left shadow-sm shadow-sm shadow-sm">
-                    오늘의 경쟁자: <span className="text-sentinel-green font-black shadow-sm">{competitorStats.count.toLocaleString()}명</span>
-                  </p>
-                  <div className="h-4 w-px bg-gray-200 dark:bg-white/10 shadow-sm shadow-sm shadow-sm shadow-sm"></div>
-                  <p className="font-sans text-xs text-gray-500 uppercase tracking-widest font-black opacity-80 font-bold text-left shadow-sm shadow-sm shadow-sm">
-                    현재 순위: <span className="text-sentinel-green font-black underline decoration-sentinel-green/30 shadow-sm">{competitorStats.myRank}</span>
-                  </p>
-                  <div className="h-4 w-px bg-gray-200 dark:bg-white/10 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm"></div>
-                  <button 
-                    onClick={() => setIsDonationOpen(true)}
-                    className="font-sans text-xs text-sentinel-green hover:underline uppercase tracking-widest font-black italic font-headline font-bold italic shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-center shadow-sm"
-                  >
-                    기부 증서 보기
-                  </button>
-                </div>
-                <div className="mt-8 flex gap-1.5 shadow-inner shadow-inner shadow-inner shadow-inner shadow-sm shadow-sm shadow-sm">
-                  {[...Array(15)].map((_, i) => (
-                    <div key={i} className={`h-1.5 w-full rounded-full transition-all duration-1000 ${i < 10 ? 'bg-sentinel-green shadow-[0_0_8px_rgba(0,255,148,0.5)] shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm' : 'bg-gray-100 dark:bg-white/5 shadow-sm shadow-sm'}`}></div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Module 2: Survival Timer */}
-              <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[32px] p-8 backdrop-blur-sm relative shadow-glow-green dark:shadow-glow-green-lg transition-all text-left overflow-hidden">
-                <div className="flex justify-between items-start mb-6 font-sans text-left text-left text-left shadow-sm">
-                  <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm">Module_02: 생존_카운트</h3>
-                  <LiveDot />
-                </div>
-                <div className="flex min-w-0 flex-col justify-center items-center py-2 text-center text-center text-center shadow-sm shadow-sm overflow-visible">
-                  <p 
-                    className={`timer-display tabular-nums font-black tracking-[0.02em] leading-none glow-green drop-shadow-2xl italic transition-all duration-300 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm whitespace-nowrap ${bonusPulse ? 'text-white scale-110 shadow-[0_0_30px_rgba(0,255,148,0.6)] shadow-xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm' : 'text-sentinel-green shadow-sm shadow-sm'}`}
-                    style={{fontSize: 'clamp(1.7rem, 5.6vw, 2.85rem)', letterSpacing: '-0.03em'}}
-                  >
-                    {formatTime(survivalTime)}
-                  </p>
-                  <p className="font-sans font-medium text-sm text-gray-400 dark:text-gray-500 mt-4 uppercase tracking-[0.15em] opacity-60 shadow-sm shadow-sm shadow-sm text-center shadow-sm shadow-sm leading-tight">10초마다 데이터가 실시간으로 동기화됩니다</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Module 3: Live Leaderboard */}
-            <div className="space-y-3 text-left font-sans text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm">
+          {/* Left Column: Leaderboard (5위) + Minigame Hub */}
+          <div ref={leftModulesRef} className="lg:col-span-8 flex flex-col self-stretch text-left text-left shadow-sm gap-0">
+            {/* Module 3: Live Leaderboard (Top 5 Only) */}
+            <div className="space-y-2 text-left font-sans text-left text-left text-left text-left shadow-sm flex-shrink-0">
               <div className="flex items-center justify-between px-4 font-sans font-black font-sans font-black font-sans font-black font-sans font-black shadow-sm shadow-sm shadow-sm shadow-sm">
-                <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm">Module_03: 실시간_리더보드</h3>
-                <span className="font-sans text-[9px] text-sentinel-green/60 uppercase italic tracking-widest font-headline italic italic italic italic italic italic shadow-sm shadow-sm shadow-sm text-right shadow-sm shadow-sm shadow-sm shadow-sm">네트워크 활성</span>
+                <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm">Module_03: 실시간_순위</h3>
+                <span className="font-sans text-[9px] text-sentinel-green/60 uppercase italic tracking-widest font-headline italic italic italic italic italic italic shadow-sm shadow-sm shadow-sm text-right shadow-sm shadow-sm shadow-sm shadow-sm">TOP 5</span>
               </div>
-              <LeaderboardTable onRankUpdate={handleRankUpdate} />
+              <LeaderboardTable onRankUpdate={handleRankUpdate} maxRank={5} />
             </div>
 
-            <HallOfFame />
-
-            {/* Minigame Hub */}
-            <div className="pt-2 font-sans text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm">
-              <div className="flex items-center justify-between px-4 mb-3 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
+            {/* Module 5: Minigame Hub (Flex-grow) */}
+            <div className="flex-1 flex flex-col min-h-0 font-sans text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm pt-3">
+              <div className="flex items-center justify-between px-4 mb-2 flex-shrink-0 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
                 <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Module_05: 미니게임_허브</h3>
               </div>
-              <MinigameHub />
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <MinigameHub />
+              </div>
             </div>
           </div>
 

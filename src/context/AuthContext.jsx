@@ -74,17 +74,38 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (!user) return;
 
+    // 프로필 실시간 리스너 - 중복 리스너 방지
     const userRef = doc(db, 'users', user.uid);
-    const unsubscribe = onSnapshot(userRef, (docSnap) => {
-      if (!docSnap.exists()) return;
+    let unsubscribeSnapshot = null;
 
-      const nextProfile = docSnap.data();
-      setProfile(nextProfile);
-      setShowNicknameModal(!nextProfile.nickname);
-    });
+    const setupProfileListener = () => {
+      try {
+        unsubscribeSnapshot = onSnapshot(userRef, (docSnap) => {
+          if (!docSnap.exists()) return;
 
-    return () => unsubscribe();
-  }, [user]);
+          const nextProfile = docSnap.data();
+          setProfile(nextProfile);
+          setShowNicknameModal(!nextProfile.nickname);
+        }, (error) => {
+          console.error('Profile Snapshot Error:', error);
+          // Quota exceeded 에러 시 5초 후 재시도
+          if (error.code === 'resource-exhausted' || error.message?.includes('429')) {
+            setTimeout(() => setupProfileListener(), 5000);
+          }
+        });
+      } catch (err) {
+        console.error('Setup Profile Listener Error:', err);
+      }
+    };
+
+    setupProfileListener();
+
+    return () => {
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+      }
+    };
+  }, [user?.uid]);
 
   const loginWithGoogle = async () => {
     try {
