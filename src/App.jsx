@@ -61,7 +61,7 @@ const SystemStatus = ({ competitorCount, myRank }) => {
           <h4 className="font-mono font-black text-2xl italic text-black dark:text-white tracking-tight mb-1">
             디지털 센티넬
           </h4>
-          <p className="text-xs text-gray-500 font-sans uppercase tracking-widest">System Status Monitor</p>
+          <p className="text-xs text-gray-500 font-sans uppercase tracking-widest">시스템 상태 모니터</p>
         </div>
 
         {/* Network & CPU Gauges */}
@@ -158,13 +158,20 @@ const SurvivalTimer = () => {
       </div>
 
       <div className="flex-1 flex flex-col justify-center items-center gap-4">
-        {/* Large Timer Display */}
+        {/* Large Timer Display with Neon Glow */}
         <div className="text-center">
-          <div className={`text-7xl font-mono font-black italic tracking-tighter mb-2 drop-shadow-lg transition-all duration-300 ${
-            isActive 
-              ? 'text-sentinel-green animate-pulse shadow-[0_0_30px_rgba(0,255,148,0.4)]' 
-              : 'text-gray-400 shadow-none'
-          }`}>
+          <div 
+            className={`text-7xl font-mono font-black italic tracking-tighter mb-2 transition-all duration-300 ${
+              isActive 
+                ? 'text-sentinel-green animate-pulse' 
+                : 'text-gray-400'
+            }`}
+            style={{
+              textShadow: isActive 
+                ? '0 0 10px rgba(0, 255, 148, 0.8), 0 0 20px rgba(0, 255, 148, 0.6), 0 0 30px rgba(0, 255, 148, 0.4), 0 0 40px rgba(0, 255, 148, 0.2)'
+                : 'none'
+            }}
+          >
             {formatTime(survivalTime)}
           </div>
           <p className="text-xs text-gray-400 font-sans uppercase tracking-widest font-bold">실시간 생존 시간</p>
@@ -213,10 +220,10 @@ const WelcomeSplash = ({ user, visible }) => {
 const UpdateNoteModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
   const updates = [
-    { category: 'SECURITY', title: 'Rule 03 session detection', desc: 'Only one active tab can own the timer at a time.' },
-    { category: 'FEATURE', title: 'Minigame bonus sync', desc: 'Bonus time now lands in the survival timer immediately.' },
-    { category: 'UI/UX', title: 'Layout and typography pass', desc: 'Live channel, donation surfaces, and Noto Sans KR alignment were refined.' },
-    { category: 'PAYMENT', title: 'Donation certificate refresh', desc: 'Total donation and the 50 percent shared donation copy are now presentation-ready.' },
+    { category: '보안', title: '규칙 03: 세션 감지', desc: '오직 하나의 활성 탭만 타이머를 소유할 수 있습니다.' },
+    { category: '기능', title: '미니게임 보너스 동기화', desc: '보너스 시간이 생존 타이머에 즉시 반영됩니다.' },
+    { category: 'UI/UX', title: '레이아웃 및 타이포그래피 개선', desc: '라이브 채널, 후원 인터페이스, Noto Sans KR 정렬이 정재되었습니다.' },
+    { category: '결제', title: '후원 증명서 갱신', desc: '총 기부금과 50% 공유 후원 문구가 이제 발표 준비 완료입니다.' },
   ];
 
   return (
@@ -228,7 +235,7 @@ const UpdateNoteModal = ({ isOpen, onClose }) => {
         onClick={e => e.stopPropagation()}
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/30 shadow-sm"></div>
-        <h2 className="text-2xl font-mono font-black mb-2 uppercase italic text-sentinel-green font-headline italic tracking-tight">시스템 업데이트 노트</h2>
+        <h2 className="text-2xl font-mono font-black mb-2 uppercase italic text-sentinel-green font-headline italic tracking-tight"><TypingText text="시스템 업데이트 노트" speed={60} /></h2>
         <p className="text-gray-400 text-[10px] font-mono mb-8 uppercase tracking-[0.2em] font-black">Sentinel-OS Version 2.4.0</p>
         
         <div className="space-y-6">
@@ -351,7 +358,7 @@ const ProfileModal = ({ isOpen, onClose, onSuccessCallback }) => {
         onClick={e => e.stopPropagation()}
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/30 shadow-sm"></div>
-        <h2 className="text-xl font-mono font-black mb-2 uppercase italic text-sentinel-green font-headline tracking-tight">Profile_Settings</h2>
+        <h2 className="text-xl font-mono font-black mb-2 uppercase italic text-sentinel-green font-headline tracking-tight">프로필_설정</h2>
         <p className="text-gray-400 text-[10px] font-sans mb-6 uppercase tracking-[0.2em] font-black">운영자 프로필 관리</p>
         <div className="space-y-6">
           <div className="space-y-3">
@@ -386,7 +393,7 @@ const ProfileModal = ({ isOpen, onClose, onSuccessCallback }) => {
           </div>
           <div className="relative py-3">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10"></div></div>
-            <div className="relative flex justify-center text-[10px] uppercase font-mono text-gray-500 bg-white dark:bg-[#0A0A0A] px-2">or</div>
+            <div className="relative flex justify-center text-[10px] uppercase font-mono text-gray-500 bg-white dark:bg-[#0A0A0A] px-2">또는</div>
           </div>
           <button
             onClick={handleLogout}
@@ -401,63 +408,60 @@ const ProfileModal = ({ isOpen, onClose, onSuccessCallback }) => {
     </div>
   );
 };
-const SponsorshipModal = ({ isOpen, onClose, onDonationSuccess }) => {
+const TossPaymentSimulator = ({ isOpen, onClose, onDonationSuccess }) => {
   const [amount, setAmount] = useState(5000);
-  const [destination, setDestination] = useState('UNICEF');
+  const [step, setStep] = useState(1); // 1: 선택, 2: 결제 중, 3: 완료
   const { user, profile } = useAuth();
+  const [isProcessing, setIsProcessing] = useState(false);
 
   if (!isOpen) return null;
 
-  const destinations = [
-    { id: 'UNICEF', name: '유니세프 (아동 구호)', icon: 'U' },
-    { id: 'WWF', name: 'WWF (환경 보호)', icon: 'W' },
-    { id: 'DOCTORS', name: '국경없는의사회 (의료)', icon: 'D' },
+  const donationTiers = [
+    { icon: '☕', label: '소액 후원', amount: 5000 },
+    { icon: '⚡', label: '파워 후원', amount: 10000 },
+    { icon: '👑', label: 'VIP 후원', amount: 20000 },
   ];
 
-  const handleTossPayment = async () => {
-    const clientKey = 'test_ck_D5akZ081ROnLz7V5vL7VrsW4u0yx';
-    const tossPayments = await loadTossPayments(clientKey);
-
-    try {
-      await tossPayments.requestPayment('카드', {
-        amount: amount,
-        orderId: `don_${Math.random().toString(36).substring(2, 11)}`,
-        orderName: '디지털 센티널 시스템 후원',
-        customerName: profile?.nickname || 'Guest',
-        successUrl: `${window.location.origin}?payment=success&amount=${amount}&to=${destination}`,
-        failUrl: `${window.location.origin}?payment=fail`,
-      });
-    } catch (error) {
-      console.error('Payment error:', error);
-    }
-  };
-
-  const handleVirtualDonation = async () => {
+  const handleSimulatePayment = async () => {
     if (!user) {
-      alert('로그인이 필요합니다. 상단의 Google 로그인 버튼을 눌러주세요.');
+      alert('로그인이 필요합니다.');
       return;
     }
     
     if (!profile?.nickname) {
-      alert('먼저 별명을 설정해주세요.');
+      alert('별명을 먼저 설정해주세요.');
       return;
     }
 
-    try {
-      await addDoc(collection(db, 'donations'), {
-        uid: user.uid,
-        nickname: profile.nickname,
-        photoURL: profile.photoURL || user.photoURL,
-        amount: amount,
-        to: destination,
-        timestamp: serverTimestamp()
-      });
-      onClose();
-      onDonationSuccess?.();
-    } catch (error) {
-      console.error('Virtual donation error:', error);
-      alert(`가상 후원 중 오류가 발생했습니다: ${error.message}`);
-    }
+    setIsProcessing(true);
+    setStep(2);
+
+    // 결제 시뮬레이션 (2초)
+    setTimeout(async () => {
+      try {
+        await addDoc(collection(db, 'donations'), {
+          uid: user.uid,
+          nickname: profile.nickname,
+          photoURL: profile.photoURL || user.photoURL,
+          amount: amount,
+          to: 'DIGITAL_SENTINEL',
+          timestamp: serverTimestamp()
+        });
+        setStep(3);
+        setIsProcessing(false);
+      } catch (error) {
+        console.error('Donation error:', error);
+        alert('후원 중 오류가 발생했습니다.');
+        setStep(1);
+        setIsProcessing(false);
+      }
+    }, 2000);
+  };
+
+  const handleConfirm = () => {
+    onDonationSuccess?.();
+    setStep(1);
+    onClose();
   };
 
   return (
@@ -465,81 +469,90 @@ const SponsorshipModal = ({ isOpen, onClose, onDonationSuccess }) => {
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="max-w-md w-full max-h-[90vh] overflow-y-auto bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl overflow-hidden relative"
+        className="max-w-sm w-full bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl overflow-hidden relative"
         onClick={e => e.stopPropagation()}
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/30"></div>
-        <h2 className="text-xl font-mono font-black mb-2 uppercase italic text-sentinel-green italic font-headline tracking-tight">Sponsorship_Protocol</h2>
-        <p className="text-gray-400 text-[10px] font-sans mb-8 uppercase tracking-[0.2em] font-black">시스템 유지 및 기부를 위한 후원</p>
         
-        <div className="space-y-6">
-          <div className="space-y-3">
-            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest px-1">후원 금액 선택</p>
-            <div className="grid grid-cols-3 gap-3">
-              {[5000, 10000, 20000].map(amt => (
-                <button 
-                  key={amt}
-                  onClick={() => setAmount(amt)}
-                  className={`py-3 rounded-xl border font-mono font-bold text-xs transition-all ${
-                    amount === amt ? 'bg-sentinel-green text-black border-sentinel-green shadow-[0_0_15px_rgba(0,255,148,0.3)]' : 'bg-transparent text-gray-500 border-white/10 hover:border-sentinel-green/50'
-                  }`}
-                >
-                  KRW {amt.toLocaleString()}
-                </button>
-              ))}
+        {step === 1 && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-mono font-black mb-2 uppercase italic text-sentinel-green font-headline tracking-tight">토스페이 후원</h2>
+              <p className="text-gray-400 text-xs font-sans mb-6 uppercase tracking-widest">디지털 센티널 시스템 유지 기금</p>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-mono font-bold text-gray-500 uppercase tracking-widest">후원 금액 선택</p>
+              <div className="grid grid-cols-3 gap-3">
+                {donationTiers.map(tier => (
+                  <button 
+                    key={tier.amount}
+                    onClick={() => setAmount(tier.amount)}
+                    className={`py-4 rounded-xl border text-center font-bold transition-all ${
+                      amount === tier.amount 
+                        ? 'bg-sentinel-green text-black border-sentinel-green shadow-[0_0_15px_rgba(0,255,148,0.3)]' 
+                        : 'bg-transparent text-gray-500 border-white/10 hover:border-sentinel-green/50'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">{tier.icon}</div>
+                    <div className="text-[10px] font-sans">{tier.label}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-4 bg-sentinel-green/10 border border-sentinel-green/20 rounded-xl">
+              <p className="text-xs text-gray-400 font-sans mb-1">후원액</p>
+              <p className="text-2xl font-mono font-black text-sentinel-green">₩ {amount.toLocaleString()}</p>
+            </div>
+
+            <button 
+              onClick={handleSimulatePayment}
+              disabled={isProcessing}
+              className="w-full py-4 bg-[#0064FF] text-white font-mono font-black text-sm uppercase tracking-widest rounded-2xl hover:opacity-90 transition-all disabled:opacity-50"
+            >
+              💳 결제하기
+            </button>
+
+            <button onClick={onClose} className="w-full py-2 text-gray-500 font-sans font-bold text-xs uppercase hover:text-white transition-colors">닫기</button>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-6 text-center">
+            <div>
+              <h2 className="text-xl font-mono font-black mb-2 uppercase italic text-sentinel-green font-headline">결제 진행 중</h2>
+            </div>
+            <div className="py-12 flex flex-col items-center gap-6">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 2, ease: 'linear' }}
+                className="w-16 h-16 border-4 border-sentinel-green/30 border-t-sentinel-green rounded-full"
+              />
+              <p className="text-sm text-gray-400 font-sans">토스페이 결제 시뮬레이션 중...</p>
             </div>
           </div>
+        )}
 
-          <div className="space-y-3">
-            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest px-1">기부 대상 선택</p>
-            <div className="space-y-2">
-              {destinations.map(dest => (
-                <button
-                  key={dest.id}
-                  onClick={() => setDestination(dest.id)}
-                  className={`w-full p-4 rounded-2xl border text-left flex items-center gap-4 transition-all ${
-                    destination === dest.id ? 'bg-sentinel-green/10 border-sentinel-green' : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-sentinel-green/30'
-                  }`}
-                >
-                  <span className="text-xl">{dest.icon}</span>
-                  <span className="font-sans font-bold text-xs text-black dark:text-white">{dest.name}</span>
-                  {destination === dest.id && <div className="ml-auto w-2 h-2 bg-sentinel-green rounded-full animate-pulse"></div>}
-                </button>
-              ))}
+        {step === 3 && (
+          <div className="space-y-6 text-center">
+            <div>
+              <h2 className="text-xl font-mono font-black mb-2 uppercase italic text-sentinel-green font-headline">결제 완료 ✓</h2>
+              <p className="text-gray-400 text-xs font-sans">후원해주셔서 감사합니다!</p>
             </div>
+            <div className="py-8 space-y-3">
+              <div className="text-4xl">🎉</div>
+              <p className="text-sm text-gray-400 font-sans">₩ {amount.toLocaleString()} 후원</p>
+              <p className="text-xs text-gray-500 font-mono">Order ID: TON_{Math.random().toString(36).substring(2, 11).toUpperCase()}</p>
+            </div>
+            <button 
+              onClick={handleConfirm}
+              className="w-full py-4 bg-sentinel-green text-black font-mono font-black text-sm uppercase tracking-widest rounded-2xl hover:opacity-90 transition-all"
+            >
+              확인
+            </button>
           </div>
-
-          <button 
-            onClick={handleTossPayment}
-            className="w-full py-4 bg-[#0064FF] text-white font-mono font-black text-sm uppercase tracking-widest rounded-2xl hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg"
-          >
-            <span className="text-lg animate-pulse">💳</span> 토스페이 결제
-          </button>
-
-          <button 
-            onClick={handleVirtualDonation}
-            className="w-full py-4 bg-sentinel-green text-black font-mono font-black text-sm uppercase tracking-widest rounded-2xl hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg"
-          >
-            <span className="text-lg animate-pulse">🫶</span>
-            가상 후원 테스트
-          </button>
-
-          <div className="relative py-2">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5 shadow-sm"></div></div>
-            <div className="relative flex justify-center text-[8px] uppercase font-mono text-gray-600 bg-white dark:bg-[#0A0A0A] px-2 tracking-[0.3em] font-bold">International Support</div>
-          </div>
-
-          <a 
-            href="https://www.buymeacoffee.com/noguen" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="w-full py-4 bg-[#FFDD00] text-black font-mono font-black text-sm uppercase tracking-widest rounded-2xl hover:opacity-90 transition-all flex items-center justify-center gap-2 font-sans shadow-lg font-bold"
-          >
-            <span className="text-lg">COF</span> Buy Me a Coffee
-          </a>
-        </div>
-
-        <button onClick={onClose} className="mt-6 w-full py-3 text-gray-500 font-sans font-bold text-[10px] uppercase tracking-widest hover:text-white transition-colors text-center">닫기</button>
+        )}
       </motion.div>
     </div>
   );
@@ -885,32 +898,24 @@ const MinigameHub = () => {
   );
 };
 
-// Mock competitor data generator
+// Mock competitor data generator with preset demo data
 const generateMockCompetitors = () => {
-  const mockNames = [
-    'CipherFox',
-    'NeonRiver',
-    'OrbitZero',
-    'SignalBloom',
-    'VectorLime',
-    'NightRelay',
-    'StaticWave',
-    'EchoFrame'
+  // 발표 테스트용 가상 데이터
+  const presetData = [
+    { nickname: 'Sentinel_01', survival_time: 9912, status: 'ONLINE' },
+    { nickname: 'NeonRiver', survival_time: 8645, status: 'ONLINE' },
+    { nickname: 'CipherFox', survival_time: 7534, status: 'OFFLINE' },
+    { nickname: 'OrbitZero', survival_time: 6723, status: 'ONLINE' },
+    { nickname: 'SignalBloom', survival_time: 5891, status: 'OFFLINE' },
   ];
-  
-  const mockData = [];
-  for (let i = 0; i < 6; i++) {
-    const baseTime = Math.random() * 86400000; // 0 to 24 hours in ms
-    const variance = Math.random() * 7200000; // 0 to 2 hours variance
-    mockData.push({
-      id: `mock_${i}`,
-      nickname: mockNames[i % mockNames.length],
-      photoURL: `https://i.pravatar.cc/32?img=${Math.floor(Math.random() * 70) + 1}`,
-      survival_time: baseTime + variance,
-      status: Math.random() > 0.3 ? 'ONLINE' : 'OFFLINE'
-    });
-  }
-  return mockData.sort((a, b) => b.survival_time - a.survival_time);
+
+  return presetData.map((data, idx) => ({
+    id: `preset_${idx}`,
+    nickname: data.nickname,
+    photoURL: `https://i.pravatar.cc/32?img=${20 + idx}`,
+    survival_time: data.survival_time,
+    status: data.status
+  })).sort((a, b) => b.survival_time - a.survival_time);
 };
 
 const ShortcutGuide = ({ isOpen, onClose }) => {
@@ -1529,7 +1534,7 @@ function App() {
             onClick={() => setIsUpdateNoteOpen(true)}
             className="px-4 py-2 text-gray-400 font-sans font-black text-[10px] uppercase tracking-widest hover:text-sentinel-green transition-all font-bold shadow-sm text-center"
           >
-            업데이트 노트
+            📋 업데이트 내역
           </button>
           <button 
             onClick={() => setIsSponsorshipOpen(true)}
@@ -1641,7 +1646,7 @@ function App() {
       {isAdmin && <AdminTerminal isOpen={isTerminalOpen} onClose={() => setIsTerminalOpen(false)} />}
       <ShortcutGuide isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
       <DonationModal isOpen={isDonationOpen} onClose={() => setIsDonationOpen(false)} />
-      <SponsorshipModal 
+      <TossPaymentSimulator 
         isOpen={isSponsorshipOpen} 
         onClose={() => setIsSponsorshipOpen(false)}
         onDonationSuccess={handleDonationSuccessFlow}
