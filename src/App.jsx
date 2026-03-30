@@ -643,12 +643,18 @@ const Chat = () => {
       </div>
       <div className="p-6 bg-sentinel-green/5 border-t border-sentinel-green/10 shadow-xl shadow-sm">
         {user ? (
-          <form onSubmit={sendMessage} className="text-left">
+          <form onSubmit={sendMessage} className="flex gap-2">
             <input 
               value={input} onChange={e => setInput(e.target.value)}
-              className="w-full bg-black/10 dark:bg-black/40 border border-sentinel-green/20 px-4 py-3 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-sentinel-green/50 transition-all font-mono text-black dark:text-white placeholder:text-gray-400 font-black shadow-inner text-left"
-              placeholder="시스템 통신 브로드캐스트..."
+              className="flex-1 bg-black/10 dark:bg-black/40 border border-sentinel-green/20 px-4 py-3 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-sentinel-green/50 transition-all font-mono text-black dark:text-white placeholder:text-gray-400 font-black shadow-inner"
+              placeholder="BROADCAST_MSG..."
             />
+            <button 
+              type="submit"
+              className="px-4 py-2 bg-black dark:bg-sentinel-green text-sentinel-green dark:text-black font-sans font-black text-[10px] uppercase tracking-tighter rounded-xl border border-sentinel-green/30 hover:shadow-[0_0_15px_rgba(0,255,148,0.3)] transition-all font-bold"
+            >
+              전송
+            </button>
           </form>
         ) : (
           <div className="text-center py-2 text-center shadow-sm">
