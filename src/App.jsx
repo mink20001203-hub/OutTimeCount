@@ -77,17 +77,43 @@ const UpdateNoteModal = ({ isOpen, onClose }) => {
   );
 };
 
+const SuccessToast = ({ message, visible }) => {
+  if (!visible) return null;
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="fixed top-24 right-6 z-[600]"
+    >
+      <div className="bg-sentinel-green text-black px-6 py-3 rounded-2xl shadow-[0_0_30px_rgba(0,255,148,0.4)] flex items-center gap-3 border border-white/20">
+        <span className="text-lg">✓</span>
+        <span className="font-sans font-bold text-sm">{message}</span>
+      </div>
+    </motion.div>
+  );
+};
+
 const ProfileModal = ({ isOpen, onClose }) => {
   const { profile, updateNickname, logout } = useAuth();
   const [nickname, setNickname] = useState(profile?.nickname || '');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleUpdateNickname = async () => {
     setError('');
+    setSuccess('');
+    setIsSubmitting(true);
     try {
       await updateNickname(nickname);
+      setSuccess('별명이 성공적으로 업데이트되었습니다');
+      setTimeout(() => setSuccess(''), 3000);
+      setTimeout(() => onClose(), 1500);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -103,28 +129,56 @@ const ProfileModal = ({ isOpen, onClose }) => {
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="max-w-md w-full bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl"
+        className="max-w-md w-full bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl overflow-hidden relative"
         onClick={e => e.stopPropagation()}
       >
-        <h2 className="text-xl font-mono font-black mb-6 uppercase italic text-sentinel-green font-headline tracking-tight">Profile_Settings</h2>
+        <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/30 shadow-sm"></div>
+        <h2 className="text-xl font-mono font-black mb-2 uppercase italic text-sentinel-green font-headline tracking-tight">Profile_Settings</h2>
+        <p className="text-gray-400 text-[10px] font-sans mb-6 uppercase tracking-[0.2em] font-black">운영자 프로필 관리</p>
+        
         <div className="space-y-6">
-          <div>
-            <label className="block text-sm font-bold mb-2 text-black dark:text-white">별명 변경</label>
+          <div className="space-y-3">
+            <label className="block text-sm font-bold mb-2 text-black dark:text-white font-sans">별명 변경</label>
             <input 
               type="text" 
               value={nickname}
               onChange={e => setNickname(e.target.value)}
-              className="w-full px-4 py-3 bg-black/5 dark:bg-black/40 border border-sentinel-green/10 rounded-xl text-black dark:text-white placeholder:text-gray-400"
+              className="w-full px-4 py-4 bg-black/5 dark:bg-black/40 border border-sentinel-green/10 rounded-xl text-black dark:text-white placeholder:text-gray-400 font-sans text-base focus:ring-1 focus:ring-sentinel-green/50 outline-none transition-all"
               placeholder="새 별명 (2~12자)"
+              disabled={isSubmitting}
             />
-            <p className="text-xs text-gray-500 mt-1">한글/영문/숫자/_, 2~12자</p>
-            {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
-            <button onClick={handleUpdateNickname} className="mt-2 w-full py-3 bg-sentinel-green text-black font-mono font-bold text-xs uppercase tracking-widest rounded-xl hover:opacity-90 transition-all">변경</button>
+            <p className="text-sm text-gray-500 mt-1 font-sans">한글/영문/숫자/_, 2~12자</p>
+            {error && (
+              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                <p className="text-red-500 text-xs font-bold font-sans">{error}</p>
+              </div>
+            )}
+            <button 
+              onClick={handleUpdateNickname} 
+              disabled={isSubmitting}
+              className="mt-3 w-full py-4 bg-sentinel-green text-black font-mono font-black text-sm uppercase tracking-widest rounded-xl hover:opacity-90 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? '업데이트 중...' : '별명 변경'}
+            </button>
           </div>
-          <button onClick={handleLogout} className="w-full py-3 bg-red-500 text-white font-mono font-bold text-xs uppercase tracking-widest rounded-xl hover:opacity-90 transition-all">로그아웃</button>
+          
+          <div className="relative py-3">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10"></div></div>
+            <div className="relative flex justify-center text-[10px] uppercase font-mono text-gray-500 bg-white dark:bg-[#0A0A0A] px-2">or</div>
+          </div>
+          
+          <button 
+            onClick={handleLogout} 
+            className="w-full py-4 bg-red-500/10 border border-red-500/20 text-red-500 font-mono font-bold text-sm uppercase tracking-widest rounded-xl hover:bg-red-500/20 transition-all"
+          >
+            로그아웃
+          </button>
         </div>
+        
         <button onClick={onClose} className="mt-6 w-full py-3 text-gray-500 font-sans font-bold text-xs uppercase tracking-widest hover:text-white transition-colors text-center">취소</button>
       </motion.div>
+      
+      <SuccessToast message={success} visible={!!success} />
     </div>
   );
 };
@@ -534,7 +588,7 @@ const NicknameModal = () => {
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/20 shadow-sm"></div>
         <h2 className="text-3xl font-mono font-black mb-2 italic uppercase tracking-tighter text-black dark:text-white font-headline italic tracking-tight text-left">ID 초기화</h2>
-        <p className="text-gray-400 text-[10px] font-sans mb-10 uppercase tracking-[0.2em] font-black text-left">운영자 코드 등록이 필요합니다</p>
+        <p className="text-gray-400 text-sm font-sans mb-10 uppercase tracking-[0.2em] font-black text-left">운영자 코드 등록이 필요합니다</p>
         <form onSubmit={handleSubmit} className="space-y-8 text-left">
           <div className="relative text-left">
             <input 
@@ -542,19 +596,19 @@ const NicknameModal = () => {
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
               placeholder="운영자_ID"
-              className="w-full px-6 py-5 bg-black/5 dark:bg-black/40 border border-sentinel-green/10 rounded-2xl font-mono text-sm focus:ring-1 focus:ring-sentinel-green/50 outline-none text-black dark:text-white placeholder:text-gray-300 transition-all font-black shadow-inner text-left"
+              className="w-full px-6 py-5 bg-black/5 dark:bg-black/40 border border-sentinel-green/10 rounded-2xl font-mono text-base focus:ring-1 focus:ring-sentinel-green/50 outline-none text-black dark:text-white placeholder:text-gray-300 transition-all font-black shadow-inner text-left"
               autoFocus
             />
             <div className="absolute right-4 top-1/2 -translate-y-1/2 w-2 h-2 bg-sentinel-green/20 rounded-full shadow-sm"></div>
           </div>
           {error && (
             <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-xl shadow-sm text-left">
-              <p className="text-red-500 text-[10px] font-black font-sans uppercase tracking-widest leading-relaxed">오류: {error}</p>
+              <p className="text-red-500 text-sm font-black font-sans uppercase tracking-widest leading-relaxed">오류: {error}</p>
             </div>
           )}
           <button 
             disabled={isSubmitting}
-            className={`w-full bg-black dark:bg-sentinel-green dark:text-black text-sentinel-green font-mono font-black py-5 rounded-2xl hover:bg-sentinel-green hover:text-black transition-all uppercase tracking-[0.3em] text-xs shadow-lg ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''} font-headline shadow-xl text-center`}
+            className={`w-full bg-black dark:bg-sentinel-green dark:text-black text-sentinel-green font-mono font-black py-5 rounded-2xl hover:bg-sentinel-green hover:text-black transition-all uppercase tracking-[0.3em] text-base shadow-lg ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''} font-headline shadow-xl text-center`}
           >
             {isSubmitting ? '코드 등록 중...' : '프로토콜 배포'}
           </button>
@@ -650,8 +704,8 @@ const LeaderboardTable = ({ onRankUpdate }) => {
             ) : (
               <tr>
                 <td colSpan="4" className="px-8 py-20 text-center shadow-sm">
-                  <div className="font-mono text-sm text-gray-400 uppercase tracking-[0.3em] font-black shadow-sm text-center shadow-sm">
-                    {loading ? '데이터 동기화 중...' : <TypingText text="생존자를 탐색 중입니다..." />}
+                  <div className="font-mono text-base text-gray-400 uppercase tracking-[0.3em] font-black shadow-sm text-center shadow-sm font-sans">
+                    {loading ? '데이터 동기화 중...' : <TypingText text="생존자를 탐색 중입니다..." className="font-sans text-base" />}
                   </div>
                 </td>
               </tr>
@@ -756,6 +810,7 @@ function App() {
   const [showSplash, setShowSplash] = useState(false);
   const [competitorStats, setCompetitorStats] = useState({ count: 0, myRank: 'PENDING...' });
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -941,16 +996,16 @@ function App() {
               </div>
 
               {/* Module 2: Survival Timer */}
-              <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm relative shadow-sm hover:shadow-sentinel-green/5 transition-all text-left shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm text-left shadow-xl shadow-xl shadow-xl">
+              <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm relative shadow-sm hover:shadow-sentinel-green/5 transition-all text-left shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm text-left shadow-xl shadow-xl shadow-xl overflow-hidden">
                 <div className="flex justify-between items-start mb-6 font-sans text-left text-left text-left shadow-sm">
                   <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm shadow-sm shadow-sm">Module_02: 생존_카운트</h3>
                   <LiveDot />
                 </div>
-                <div className="flex flex-col justify-center py-2 text-left text-left text-left shadow-sm shadow-sm">
-                  <p className={`font-mono text-6xl font-black tracking-[0.2em] glow-green drop-shadow-2xl italic transition-all duration-300 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm ${bonusPulse ? 'text-white scale-110 shadow-[0_0_30px_rgba(0,255,148,0.6)] shadow-xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm' : 'text-sentinel-green shadow-sm shadow-sm'}`}>
+                <div className="flex flex-col justify-center py-2 text-left text-left text-left shadow-sm shadow-sm overflow-hidden">
+                  <p className={`font-mono text-5xl md:text-6xl font-black tracking-[0.2em] glow-green drop-shadow-2xl italic transition-all duration-300 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm break-words ${bonusPulse ? 'text-white scale-110 shadow-[0_0_30px_rgba(0,255,148,0.6)] shadow-xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm' : 'text-sentinel-green shadow-sm shadow-sm'}`}>
                     {formatTime(survivalTime)}
                   </p>
-                  <p className="font-mono text-[10px] text-gray-400 dark:text-gray-500 mt-4 uppercase tracking-[0.2em] font-black font-sans italic opacity-60 font-black italic font-sans italic opacity-60 shadow-sm shadow-sm shadow-sm text-left shadow-sm shadow-sm">10초마다 데이터 클라우드 동기화 중...</p>
+                  <p className="font-mono text-sm text-gray-400 dark:text-gray-500 mt-4 uppercase tracking-[0.2em] font-black font-sans italic opacity-60 font-black italic font-sans italic opacity-60 shadow-sm shadow-sm shadow-sm text-left shadow-sm shadow-sm leading-tight">10초마다 데이터 클라우드 동기화 중...</p>
                 </div>
               </div>
             </div>
@@ -999,7 +1054,7 @@ function App() {
               <span className="text-4xl dark:grayscale drop-shadow-xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">🛡️</span>
             </div>
             <h2 className="text-4xl font-mono font-black mb-4 uppercase italic tracking-tighter text-black dark:text-white italic tracking-tight font-headline shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-center shadow-sm">DIGITAL SENTINEL</h2>
-            <p className="text-gray-500 dark:text-gray-400 font-sans text-[11px] uppercase tracking-[0.3em] mb-12 leading-relaxed italic font-black opacity-80 text-center text-center text-center text-center text-center text-center text-center text-center text-center font-bold font-bold font-bold font-bold font-bold shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">권한이 필요합니다<br/>보안 프로토콜 초기화 중</p>
+            <p className="text-gray-500 dark:text-gray-400 font-sans text-base uppercase tracking-[0.3em] mb-12 leading-relaxed italic font-black opacity-80 text-center text-center text-center text-center text-center text-center text-center text-center text-center font-bold font-bold font-bold font-bold font-bold shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">권한이 필요합니다<br/>보안 프로토콜 초기화 중</p>
             <button
               className="w-full py-5 bg-black dark:bg-sentinel-green dark:text-black hover:bg-sentinel-green dark:hover:bg-sentinel-green/80 text-white hover:text-black font-mono font-black text-sm rounded-[24px] transition-all duration-500 uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.1)] hover:shadow-sentinel-green/30 active:scale-95 font-headline shadow-lg shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm text-center shadow-xl shadow-xl shadow-xl"
               onClick={loginWithGoogle}
@@ -1019,6 +1074,7 @@ function App() {
       <UpdateNoteModal isOpen={isUpdateNoteOpen} onClose={() => setIsUpdateNoteOpen(false)} />
       <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
       <BonusToast pulse={bonusPulse} />
+      <SuccessToast message={successMessage} visible={!!successMessage} />
     </div>
   );
 }

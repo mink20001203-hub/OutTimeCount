@@ -7,6 +7,12 @@
   font-weight: 400;
   letter-spacing: -0.02em;
   font-size: 1.15rem;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: 'Noto Sans KR', 'Inter', 'Pretendard', system-ui, -apple-system, sans-serif;
 }
 
 body {
