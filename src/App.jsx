@@ -1,10 +1,11 @@
 ﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTimer } from './context/TimerContext';
 import { useAuth } from './context/AuthContext';
 import { db } from './firebase';
 import { 
   collection, query, orderBy, limit, onSnapshot, 
-  addDoc, serverTimestamp, getCountFromServer, where
+  addDoc, serverTimestamp, where
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminTerminal from './context/AdminTerminal';
@@ -18,6 +19,171 @@ const DEMO_PATRONS = [
 ];
 
 // --- Components ---
+
+/**
+ * Module 01: System Status - 시스템 상태 모니터링
+ * 위치: 대시보드 좌측 상단
+ */
+const SystemStatus = ({ competitorCount, myRank }) => {
+  const [networkPing, setNetworkPing] = useState(45);
+  const [cpuLoad, setCpuLoad] = useState(32);
+  
+  // 게이지 애니메이션 (가짜 데이터)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNetworkPing(Math.floor(Math.random() * 100) + 20);
+      setCpuLoad(Math.floor(Math.random() * 80) + 10);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getSecurityLevel = () => {
+    // 보안 등급 (오늘의 경쟁자 수에 기반)
+    if (competitorCount >= 50) return { level: 'CRITICAL', color: 'bg-red-500', percent: 100 };
+    if (competitorCount >= 30) return { level: 'HIGH', color: 'bg-orange-500', percent: 80 };
+    if (competitorCount >= 15) return { level: 'MEDIUM', color: 'bg-yellow-500', percent: 60 };
+    if (competitorCount >= 5) return { level: 'LOW', color: 'bg-blue-500', percent: 40 };
+    return { level: 'SAFE', color: 'bg-sentinel-green', percent: 20 };
+  };
+
+  const security = getSecurityLevel();
+
+  return (
+    <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[32px] p-6 backdrop-blur-sm shadow-[0_0_22px_rgba(0,255,148,0.08)] font-sans text-left">
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="font-sans text-xs text-sentinel-green tracking-[0.14em] font-bold uppercase">시스템_상태</h3>
+        <LiveDot />
+      </div>
+      
+      <div className="space-y-4">
+        {/* Title */}
+        <div className="text-left">
+          <h4 className="font-mono font-black text-2xl italic text-black dark:text-white tracking-tight mb-1">
+            디지털 센티넬
+          </h4>
+          <p className="text-xs text-gray-500 font-sans uppercase tracking-widest">System Status Monitor</p>
+        </div>
+
+        {/* Network & CPU Gauges */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Network Ping */}
+          <div className="p-3 bg-sentinel-green/5 rounded-xl border border-sentinel-green/10">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[9px] text-gray-400 font-sans font-bold uppercase tracking-widest">핑</p>
+              <span className="text-xs font-mono font-black text-sentinel-green">{networkPing}ms</span>
+            </div>
+            <div className="w-full h-1.5 bg-black/10 dark:bg-white/5 rounded-full overflow-hidden">
+              <motion.div
+                animate={{ width: `${Math.max(20, Math.min(100, (networkPing / 100) * 100))}%` }}
+                transition={{ duration: 0.5 }}
+                className="h-full bg-sentinel-green rounded-full"
+              />
+            </div>
+          </div>
+
+          {/* CPU Load */}
+          <div className="p-3 bg-sentinel-green/5 rounded-xl border border-sentinel-green/10">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[9px] text-gray-400 font-sans font-bold uppercase tracking-widest">CPU</p>
+              <span className="text-xs font-mono font-black text-sentinel-green">{cpuLoad}%</span>
+            </div>
+            <div className="w-full h-1.5 bg-black/10 dark:bg-white/5 rounded-full overflow-hidden">
+              <motion.div
+                animate={{ width: `${cpuLoad}%` }}
+                transition={{ duration: 0.5 }}
+                className="h-full bg-sentinel-green rounded-full"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Competitor Count */}
+        <div className="p-4 bg-sentinel-green/10 rounded-2xl border border-sentinel-green/20">
+          <p className="text-xs text-gray-400 font-sans font-bold uppercase tracking-widest mb-2">오늘의 경쟁자</p>
+          <p className="text-3xl font-mono font-black text-sentinel-green tracking-tighter">
+            {competitorCount.toLocaleString()}
+          </p>
+        </div>
+
+        {/* Security Grade */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-gray-400 font-sans font-bold uppercase tracking-widest">보안 등급</p>
+            <span className={`text-xs font-mono font-black ${security.color.replace('bg-', 'text-')} uppercase italic`}>
+              {security.level}
+            </span>
+          </div>
+          <div className="w-full h-2 bg-black/10 dark:bg-white/5 rounded-full overflow-hidden border border-sentinel-green/10">
+            <motion.div
+              className={`h-full ${security.color} rounded-full shadow-lg`}
+              initial={{ width: 0 }}
+              animate={{ width: `${security.percent}%` }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+            />
+          </div>
+        </div>
+
+        {/* My Rank */}
+        <div className="p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-sentinel-green/10 text-center">
+          <p className="text-[10px] text-gray-500 font-sans uppercase tracking-widest font-bold mb-1">내 순위</p>
+          <p className="text-2xl font-mono font-black text-sentinel-green">
+            {myRank === 'PENDING...' ? '⏳' : `#${myRank}`}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Module 02: Survival Timer - 생존 시간 카운트
+ * 위치: 중앙 상단
+ */
+const SurvivalTimer = () => {
+  const { survivalTime, formatTime, isActive } = useTimer();
+  const [lastSyncTime, setLastSyncTime] = useState(Date.now());
+  
+  useEffect(() => {
+    const syncIndicator = setInterval(() => {
+      setLastSyncTime(Date.now());
+    }, 10000);
+    return () => clearInterval(syncIndicator);
+  }, []);
+
+  return (
+    <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[32px] p-8 backdrop-blur-sm shadow-[0_0_22px_rgba(0,255,148,0.08)] font-sans text-left h-full flex flex-col justify-center items-center">
+      <div className="flex items-center justify-between w-full mb-6">
+        <h3 className="font-sans text-xs text-sentinel-green tracking-[0.14em] font-bold uppercase">생존_카운트</h3>
+        <LiveDot />
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center items-center gap-4">
+        {/* Large Timer Display */}
+        <div className="text-center">
+          <div className={`text-7xl font-mono font-black italic tracking-tighter mb-2 drop-shadow-lg transition-all duration-300 ${
+            isActive 
+              ? 'text-sentinel-green animate-pulse shadow-[0_0_30px_rgba(0,255,148,0.4)]' 
+              : 'text-gray-400 shadow-none'
+          }`}>
+            {formatTime(survivalTime)}
+          </div>
+          <p className="text-xs text-gray-400 font-sans uppercase tracking-widest font-bold">실시간 생존 시간</p>
+        </div>
+
+        {/* Sync Status */}
+        <div className="w-full pt-4 border-t border-sentinel-green/10">
+          <motion.div
+            animate={{ opacity: [1, 0.5, 1] }}
+            transition={{ repeat: Infinity, duration: 2 }}
+            className="text-center text-[10px] text-gray-500 font-sans uppercase tracking-widest font-bold px-3 py-2 bg-sentinel-green/5 rounded-xl border border-sentinel-green/10"
+          >
+            ☁️ 10초마다 데이터 클라우드 동기화 중...
+          </motion.div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const WelcomeSplash = ({ user, visible }) => {
   if (!user || !visible) return null;
@@ -347,14 +513,15 @@ const SponsorshipModal = ({ isOpen, onClose, onDonationSuccess }) => {
             onClick={handleTossPayment}
             className="w-full py-4 bg-[#0064FF] text-white font-mono font-black text-sm uppercase tracking-widest rounded-2xl hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg"
           >
-            <span className="text-lg">TP</span> 토스페이 결제
+            <span className="text-lg animate-pulse">💳</span> 토스페이 결제
           </button>
 
           <button 
             onClick={handleVirtualDonation}
             className="w-full py-4 bg-sentinel-green text-black font-mono font-black text-sm uppercase tracking-widest rounded-2xl hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg"
           >
-            <span className="text-lg">SIM</span> 가상 후원 테스트
+            <span className="text-lg animate-pulse">🫶</span>
+            가상 후원 테스트
           </button>
 
           <div className="relative py-2">
@@ -574,6 +741,21 @@ const LiveDot = () => (
   </div>
 );
 
+/** Skeleton Loading Component */
+const SkeletonRow = () => (
+  <tr>
+    <td className="px-4 py-3"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-8 animate-pulse"></div></td>
+    <td className="px-4 py-3">
+      <div className="flex items-center gap-2">
+        <div className="h-6 w-6 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse"></div>
+        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20 animate-pulse"></div>
+      </div>
+    </td>
+    <td className="px-4 py-3"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-12 mx-auto animate-pulse"></div></td>
+    <td className="px-4 py-3"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-16 ml-auto animate-pulse"></div></td>
+  </tr>
+);
+
 const TypingText = ({ text, className, speed = 100 }) => {
   const [displayedText, setDisplayedText] = useState('');
   useEffect(() => {
@@ -649,35 +831,55 @@ const DonationSuccessModal = ({ step, onConfirm, onClose }) => {
 };
 
 const MinigameHub = () => {
+  const navigate = useNavigate();
   const { addBonusTime } = useTimer();
   const games = [
-    { title: '메모리 핵', icon: '🧠', desc: '데이터 조각 일치시키기', baseScore: 100 },
-    { title: '그리드 런', icon: '🏃', desc: '패턴 장애물 회피', baseScore: 150 },
-    { title: '비트 탭', icon: '⚡', desc: '주파수 동기화 챌린지', baseScore: 200 }
+    { 
+      id: 'memory-hack',
+      title: '메모리 핵', 
+      icon: '🧠', 
+      desc: '데이터 조각 일치시키기', 
+      baseScore: 100 
+    },
+    { 
+      id: 'grid-run',
+      title: '그리드 런', 
+      icon: '🏃', 
+      desc: '패턴 장애물 회피', 
+      baseScore: 150 
+    },
+    { 
+      id: 'beat-tap',
+      title: '비트 탭', 
+      icon: '⚡', 
+      desc: '주파수 동기화 챌린지', 
+      baseScore: 200 
+    }
   ];
 
-  const handleSimulateWin = (game) => {
-    const score = game.baseScore + Math.floor(Math.random() * 50);
-    addBonusTime(score);
+  const handlePlayGame = (gameId) => {
+    navigate(`/game/${gameId}`);
   };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 text-left">
       {games.map((game, i) => (
-        <div 
+        <motion.div 
           key={i} 
-          onClick={() => handleSimulateWin(game)}
-          className="monitoring-panel-sm bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/10 p-5 rounded-3xl hover:border-sentinel-green/30 transition-all group cursor-pointer relative overflow-hidden shadow-glow-green dark:shadow-glow-green-lg active:scale-95 text-left"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => handlePlayGame(game.id)}
+          className="monitoring-panel-sm bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/10 p-5 rounded-3xl hover:border-sentinel-green/30 transition-all group cursor-pointer relative overflow-hidden shadow-glow-green dark:shadow-glow-green-lg text-left"
         >
           <div className="absolute top-0 right-0 p-3 opacity-20 font-mono text-[10px] uppercase tracking-widest font-black shadow-sm text-right">v1.0</div>
-          <div className="text-2xl mb-3 group-hover:scale-110 transition-transform inline-block shadow-sm"> {game.icon}</div>
+          <div className="text-2xl mb-3 group-hover:scale-110 transition-transform inline-block shadow-sm">{game.icon}</div>
           <h4 className="font-mono font-black text-base text-black dark:text-white mb-1 uppercase tracking-tighter italic font-headline text-left">{game.title}</h4>
           <p className="text-xs text-gray-500 font-sans uppercase tracking-widest leading-tight font-bold text-left">{game.desc}</p>
           <div className="mt-4 flex items-center gap-1 text-sentinel-green/40 font-mono text-[8px] uppercase font-black group-hover:text-sentinel-green transition-colors text-left shadow-sm">
-            <span>Click to complete</span>
-            <span className="animate-pulse shadow-sm">_</span>
+            <span>+{game.baseScore}초</span>
+            <span className="animate-pulse shadow-sm">→</span>
           </div>
-        </div>
+        </motion.div>
       ))}
     </div>
   );
@@ -809,6 +1011,8 @@ const LeaderboardTable = ({ onRankUpdate, maxRank = 10 }) => {
   const [error, setError] = useState(null);
   const mockDataRef = useRef(null);
   const unsubscribeRef = useRef(null);
+  const retryCountRef = useRef(0);
+  const maxRetriesRef = useRef(3);
 
   useEffect(() => {
     if (!user) {
@@ -841,7 +1045,7 @@ const LeaderboardTable = ({ onRankUpdate, maxRank = 10 }) => {
             setUseMockData(false);
           }
           
-          // 사용자 순위 업데이트 (콜백은 useCallback으로 메모이제이션됨)
+          // 사용자 순위 업데이트
           if (user && onRankUpdate) {
             const index = data.findIndex(u => u.id === user.uid);
             onRankUpdate(index !== -1 ? index + 1 : 'PENDING...', data.length);
@@ -849,14 +1053,29 @@ const LeaderboardTable = ({ onRankUpdate, maxRank = 10 }) => {
           
           setLoading(false);
           setError(null);
+          retryCountRef.current = 0;
         }, (error) => {
           console.error("Leaderboard Snapshot Error:", error);
-          // Quota exceeded 에러 처리
-          if (error.code === 'resource-exhausted' || error.message?.includes('429')) {
-            setError('데이터 로드 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
-            setLoading(false);
-            // 5초 후 재시도
-            setTimeout(() => setupLeaderboardListener(), 5000);
+          
+          // Quota exceeded 에러 처리 (429 or resource-exhausted)
+          if (error.code === 'resource-exhausted' || error.code === 'permission-denied' || error.message?.includes('429')) {
+            // 재시도 로직
+            if (retryCountRef.current < maxRetriesRef.current) {
+              retryCountRef.current++;
+              const delayMs = 2000 * Math.pow(2, retryCountRef.current - 1); // Exponential backoff
+              setError(`데이터 로드 오류 (재시도 ${retryCountRef.current}/${maxRetriesRef.current}...)`);
+              
+              setTimeout(() => setupLeaderboardListener(), delayMs);
+            } else {
+              // 재시도 초과 시 모의 데이터로 폴백
+              if (!mockDataRef.current) {
+                mockDataRef.current = generateMockCompetitors();
+              }
+              setCompetitors(mockDataRef.current.slice(0, maxRank));
+              setUseMockData(true);
+              setError('모의 데이터로 로딩 중입니다.');
+              setLoading(false);
+            }
           } else {
             setError('데이터를 불러올 수 없습니다.');
             setLoading(false);
@@ -879,7 +1098,7 @@ const LeaderboardTable = ({ onRankUpdate, maxRank = 10 }) => {
   }, [user]); // user만 의존성으로 설정
 
   return (
-    <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg h-full font-sans text-left flex flex-col">
+    <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg h-[340px] flex flex-col font-sans text-left">
       {useMockData && (
         <div className="bg-sentinel-green/10 border-b border-sentinel-green/20 px-4 py-2 flex-shrink-0">
           <p className="text-xs font-sans text-sentinel-green font-black uppercase tracking-widest italic">
@@ -894,18 +1113,21 @@ const LeaderboardTable = ({ onRankUpdate, maxRank = 10 }) => {
           </p>
         </div>
       )}
-      <table className="w-full text-left border-collapse shadow-sm flex-1 overflow-auto">
+      <table className="w-full text-left border-collapse shadow-sm flex-1 overflow-y-auto">
         <thead>
-          <tr className="bg-sentinel-green/5 border-b border-sentinel-green/10 shadow-sm">
-            <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 font-black italic shadow-sm text-left">순위</th>
-            <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 font-black italic text-left shadow-sm">Nickname</th>
-            <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 text-center font-black italic shadow-sm">상태</th>
-            <th className="px-4 py-4 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 text-right font-black italic shadow-sm">생존 시간</th>
+          <tr className="bg-sentinel-green/5 border-b border-sentinel-green/10 shadow-sm sticky top-0">
+            <th className="px-4 py-3 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 font-black italic shadow-sm text-left">순위</th>
+            <th className="px-4 py-3 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 font-black italic text-left shadow-sm">Nickname</th>
+            <th className="px-4 py-3 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 text-center font-black italic shadow-sm">상태</th>
+            <th className="px-4 py-3 font-mono text-[11px] whitespace-nowrap uppercase tracking-widest text-sentinel-green/60 text-right font-black italic shadow-sm">생존</th>
           </tr>
         </thead>
-        <tbody className="relative min-h-[200px] text-left">
+        <tbody className="relative text-left">
           <AnimatePresence mode="popLayout">
-            {competitors.length > 0 ? (
+            {loading ? (
+              // Skeleton Loading
+              Array(5).fill(0).map((_, i) => <SkeletonRow key={`skeleton-${i}`} />)
+            ) : competitors.length > 0 ? (
               competitors.map((comp, index) => {
                 const isMe = user?.uid === comp.id;
                 return (
@@ -920,32 +1142,31 @@ const LeaderboardTable = ({ onRankUpdate, maxRank = 10 }) => {
                     }}
                     exit={{ opacity: 0 }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    className={`border-b border-sentinel-green/5 group transition-colors hover:bg-sentinel-green/5 dark:hover:bg-sentinel-green/10 shadow-sm ${isMe ? 'ring-1 ring-inset ring-sentinel-green/20 shadow-[0_0_15px_rgba(0,255,148,0.05)]' : ''} shadow-sm`}
+                    className={`border-b border-sentinel-green/5 group transition-colors hover:bg-sentinel-green/5 dark:hover:bg-sentinel-green/10 shadow-sm ${isMe ? 'ring-1 ring-inset ring-sentinel-green/20 shadow-[0_0_15px_rgba(0,255,148,0.05)]' : ''}`}
                   >
-                    <td className="px-4 py-4 font-mono font-black text-lg text-sentinel-green flex items-center gap-2 tracking-tighter shadow-sm text-left">
+                    <td className="px-4 py-3 font-mono font-black text-lg text-sentinel-green flex items-center gap-2 tracking-tighter shadow-sm text-left">
                       {index === 0 ? <span className="text-xl drop-shadow-lg shadow-sm">🥇</span> : `#${String(index + 1).padStart(2, '0')}`}
                     </td>
-                    <td className="px-4 py-4 shadow-sm">
-                      <div className="flex items-center gap-3 text-left shadow-sm">
-                        <img src={comp.photoURL || 'https://via.placeholder.com/32'} className="w-7 h-7 rounded-full border border-sentinel-green/10 shadow-sm shadow-xl shadow-sm" />
-                        <div className="text-left">
-                          <div className={`font-sans font-bold text-sm leading-none mb-0.5 text-left shadow-sm ${isMe ? 'text-sentinel-green font-black' : 'text-black dark:text-white'}`}>
+                    <td className="px-4 py-3 shadow-sm">
+                      <div className="flex items-center gap-2 text-left shadow-sm">
+                        <img src={comp.photoURL || 'https://via.placeholder.com/32'} className="w-6 h-6 rounded-full border border-sentinel-green/10 shadow-sm flex-shrink-0" />
+                        <div className="text-left min-w-0">
+                          <div className={`font-sans font-bold text-xs leading-tight text-left shadow-sm truncate ${isMe ? 'text-sentinel-green font-black' : 'text-black dark:text-white'}`}>
                             {comp.nickname || 'Unknown'}
-                            {isMe && <span className="ml-2 text-[9px] bg-sentinel-green/20 px-1.5 py-0.5 rounded uppercase tracking-tighter font-black font-sans shadow-sm">나</span>}
+                            {isMe && <span className="ml-1 text-[7px] bg-sentinel-green/20 px-1 py-0.5 rounded uppercase tracking-tighter font-black font-sans shadow-sm">나</span>}
                           </div>
-                          <div className="font-mono text-[7px] text-gray-400 uppercase tracking-widest font-black opacity-60 text-left shadow-sm">{comp.id.substring(0, 8)}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-center shadow-sm text-center">
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest font-headline shadow-sm shadow-xl ${
-                        comp.status === 'ONLINE' ? 'bg-sentinel-green/10 text-sentinel-green shadow-[0_0_10px_rgba(0,255,148,0.1)] shadow-sm' : 'bg-gray-100 dark:bg-white/5 text-gray-400 opacity-50 shadow-sm'
+                    <td className="px-4 py-3 text-center shadow-sm text-center">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest font-headline shadow-sm ${
+                        comp.status === 'ONLINE' ? 'bg-sentinel-green/10 text-sentinel-green shadow-[0_0_10px_rgba(0,255,148,0.1)]' : 'bg-gray-100 dark:bg-white/5 text-gray-400 opacity-50'
                       }`}>
-                        <span className={`w-1 h-1 rounded-full ${comp.status === 'ONLINE' ? 'bg-sentinel-green animate-pulse shadow-[0_0_5px_rgba(0,255,148,0.8)] shadow-sm' : 'bg-gray-400 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm'}`}></span>
-                        {comp.status === 'ONLINE' ? '온라인' : '오프라인'}
+                        <span className={`w-1 h-1 rounded-full ${comp.status === 'ONLINE' ? 'bg-sentinel-green animate-pulse' : 'bg-gray-400'}`}></span>
+                        {comp.status === 'ONLINE' ? '온' : '오프'}
                       </span>
                     </td>
-                    <td className={`px-4 py-4 text-right font-mono font-bold text-sm tracking-widest italic shadow-sm text-right ${isMe ? 'text-sentinel-green drop-shadow-[0_0_8px_rgba(0,255,148,0.4)] shadow-sm' : 'text-black dark:text-white shadow-sm'}`}>
+                    <td className={`px-4 py-3 text-right font-mono font-bold text-xs tracking-widest italic shadow-sm text-right ${isMe ? 'text-sentinel-green drop-shadow-[0_0_8px_rgba(0,255,148,0.4)]' : 'text-black dark:text-white'}`}>
                       {formatTime(comp.survival_time || 0)}
                     </td>
                   </motion.tr>
@@ -953,9 +1174,9 @@ const LeaderboardTable = ({ onRankUpdate, maxRank = 10 }) => {
               })
             ) : (
               <tr>
-                <td colSpan="4" className="px-8 py-20 text-center shadow-sm">
-                  <div className="font-mono text-base text-gray-400 uppercase tracking-[0.3em] font-black shadow-sm text-center shadow-sm font-sans">
-                    {loading ? "데이터 로딩 중..." : <TypingText text="생존자를 탐색 중입니다..." className="font-sans text-base" />}
+                <td colSpan="4" className="px-8 py-12 text-center shadow-sm">
+                  <div className="font-mono text-xs text-gray-400 uppercase tracking-[0.2em] font-black shadow-sm text-center shadow-sm font-sans">
+                    {loading ? "로딩 중..." : "탐색 중..."}
                   </div>
                 </td>
               </tr>
@@ -1081,7 +1302,7 @@ const Chat = () => {
             ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-600 dark:text-yellow-400' 
             : 'bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400'
         }`}>
-          {spamWarning || chatError}
+          {spamWarning ? '⏳ ' + spamWarning : '❌ ' + chatError}
         </div>
       )}
       <div className="shrink-0 p-6 bg-sentinel-green/5 border-t border-sentinel-green/10 backdrop-blur-md shadow-xl shadow-sm">
@@ -1156,19 +1377,6 @@ function App() {
       clearTimeout(splashTimer);
     };
   }, [user, hasPlayedWelcomeSequence]);
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const coll = collection(db, 'users');
-        const snapshot = await getCountFromServer(coll);
-        setCompetitorStats(prev => ({ ...prev, count: snapshot.data().count }));
-      } catch (error) {
-        console.error("Fetch stats error:", error);
-      }
-    };
-    fetchStats();
-  }, []);
 
   // handleRankUpdate를 useCallback으로 메모이제이션하여 불필요한 의존성 재생성 방지
   const handleRankUpdate = useCallback((rank, count) => {
@@ -1325,8 +1533,9 @@ function App() {
           </button>
           <button 
             onClick={() => setIsSponsorshipOpen(true)}
-            className="px-4 py-2 rounded-xl border border-sentinel-green/50 text-sentinel-green font-sans font-black text-[10px] uppercase tracking-widest hover:bg-sentinel-green hover:text-black transition-all shadow-xl font-headline shadow-inner shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm text-center shadow-xl shadow-xl shadow-xl"
+            className="px-4 py-2 rounded-xl border border-sentinel-green/50 text-sentinel-green font-sans font-black text-[10px] uppercase tracking-widest hover:bg-sentinel-green hover:text-black transition-all shadow-xl font-headline shadow-inner shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm text-center shadow-xl shadow-xl shadow-xl flex items-center gap-1.5"
           >
+            <span className="text-sm animate-pulse">🫶</span>
             후원하기
           </button>
           <ThemeToggle />
@@ -1350,40 +1559,62 @@ function App() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.8, delay: !showNicknameModal ? 0.3 : 0 }}
-          className="max-w-7xl mx-auto px-4 pt-24 pb-12 grid grid-cols-1 lg:grid-cols-12 items-stretch gap-6 min-h-screen text-left text-left text-left text-left shadow-sm"
+          className="max-w-7xl mx-auto px-4 pt-24 pb-12 grid grid-cols-1 lg:grid-cols-12 items-start gap-4 text-left text-left text-left text-left shadow-sm"
         >
-          {/* Left Column: Leaderboard (5위) + Minigame Hub */}
-          <div ref={leftModulesRef} className="lg:col-span-8 flex flex-col self-stretch text-left text-left shadow-sm gap-0">
-            {/* Module 3: Live Leaderboard (Top 5 Only) */}
-            <div className="space-y-2 text-left font-sans text-left text-left text-left text-left shadow-sm flex-shrink-0">
-              <div className="flex items-center justify-between px-4 font-sans font-black font-sans font-black font-sans font-black font-sans font-black shadow-sm shadow-sm shadow-sm shadow-sm">
-                <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm">Module_03: 실시간_순위</h3>
-                <span className="font-sans text-[9px] text-sentinel-green/60 uppercase italic tracking-widest font-headline italic italic italic italic italic italic shadow-sm shadow-sm shadow-sm text-right shadow-sm shadow-sm shadow-sm shadow-sm">TOP 5</span>
-              </div>
-              <LeaderboardTable onRankUpdate={handleRankUpdate} maxRank={5} />
+          {/* Top Section: Module 01 & 02 */}
+          <div className="lg:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-4 text-left shadow-sm">
+            {/* Module 01: System Status */}
+            <div className="md:col-span-1 text-left shadow-sm flex-shrink-0">
+              <SystemStatus 
+                competitorCount={competitorStats.count} 
+                myRank={competitorStats.myRank}
+              />
             </div>
 
-            {/* Module 5: Minigame Hub (Flex-grow) */}
-            <div className="flex-1 flex flex-col min-h-0 font-sans text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm pt-3">
-              <div className="flex items-center justify-between px-4 mb-2 flex-shrink-0 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
-                <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Module_05: 미니게임_허브</h3>
-              </div>
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                <MinigameHub />
-              </div>
+            {/* Module 02: Survival Timer */}
+            <div className="md:col-span-2 text-left shadow-sm flex-shrink-0">
+              <SurvivalTimer />
             </div>
           </div>
 
-          {/* Right Column: Communication */}
-          <div
-            className="lg:col-span-4 h-full flex min-h-0 self-stretch flex-col space-y-2 overflow-hidden font-sans text-left text-left text-left text-left text-left text-left shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm"
-            style={module04Height ? { height: `${module04Height}px`, maxHeight: `${module04Height}px` } : undefined}
-          >
-            <div className="flex items-center justify-between px-2 text-left text-left text-left text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
-              <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Module_04: 시스템_통신</h3>
-              <span className="font-sans text-[9px] text-sentinel-green/60 uppercase italic font-headline tracking-widest opacity-60 italic italic italic italic italic italic italic italic shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-right shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">보안 링크 활성</span>
+          {/* Main Section: Module 03, 04, 05 */}
+          <div className="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 items-stretch gap-4 text-left shadow-sm">
+            {/* Left Column: Leaderboard (Module 03) + Minigame Hub (Module 05) */}
+            <div ref={leftModulesRef} className="lg:col-span-8 flex flex-col self-stretch text-left text-left shadow-sm gap-3">
+              {/* Module 3: Live Leaderboard (Top 5 Only) */}
+              <div className="space-y-1.5 text-left font-sans text-left text-left text-left text-left shadow-sm flex-shrink-0">
+                <div className="flex items-center justify-between px-4 font-sans font-black font-sans font-black font-sans font-black font-sans font-black shadow-sm shadow-sm shadow-sm shadow-sm">
+                  <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm">Module_03: 실시간_순위</h3>
+                  <span className="font-sans text-[9px] text-sentinel-green/60 uppercase italic tracking-widest font-headline italic italic italic italic italic italic shadow-sm shadow-sm shadow-sm text-right shadow-sm shadow-sm shadow-sm shadow-sm">TOP 5</span>
+                </div>
+                <LeaderboardTable onRankUpdate={handleRankUpdate} maxRank={5} />
+              </div>
+
+              {/* Module 5: Minigame Hub (Flex-grow) */}
+              <div className="flex-1 flex flex-col min-h-0 font-sans text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm pt-3">
+                <div className="flex items-center justify-between px-4 mb-2 flex-shrink-0 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
+                  <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Module_05: 미니게임_허브</h3>
+                </div>
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  <MinigameHub />
+                </div>
+              </div>
             </div>
-            <Chat />
+
+            {/* Right Column: Communication (Module 04) */}
+            <div
+              className="lg:col-span-4 h-full flex min-h-0 self-stretch flex-col space-y-1.5 overflow-hidden font-sans text-left text-left text-left text-left text-left text-left shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm"
+              style={module04Height ? { height: `${module04Height}px`, maxHeight: `${module04Height}px` } : undefined}
+            >
+              <div className="flex items-center justify-between px-2 text-left text-left text-left text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
+                <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Module_04: 시스템_통신</h3>
+                <div className="flex items-center gap-2">
+                  <span className="font-sans text-[9px] text-sentinel-green/60 uppercase italic tracking-widest opacity-60 shadow-sm text-right">보안 링크 활성</span>
+                  <div className="w-2 h-2 bg-sentinel-green rounded-full animate-pulse shadow-[0_0_8px_rgba(0,255,148,0.8)]"></div>
+                </div>
+              </div>
+              <Chat />
+            </div>
           </div>
         </motion.div>
       ) : (

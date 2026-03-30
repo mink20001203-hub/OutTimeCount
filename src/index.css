@@ -30,8 +30,28 @@ body {
   @apply bg-sentinel-dark-bg text-white;
   background-image: 
     linear-gradient(to right, rgba(0, 255, 148, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(0, 255, 148, 0.05) 1px, transparent 1px);
-  background-size: 40px 40px;
+    linear-gradient(to bottom, rgba(0, 255, 148, 0.05) 1px, transparent 1px),
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 35px,
+      rgba(0, 255, 148, 0.03) 35px,
+      rgba(0, 255, 148, 0.03) 70px
+    );
+  background-size: 40px 40px, 40px 40px, 100px 100px;
+}
+
+/* Cyberpunk striped pattern for light mode */
+body {
+  background-image: 
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 35px,
+      rgba(0, 0, 0, 0.02) 35px,
+      rgba(0, 0, 0, 0.02) 70px
+    );
+  background-size: 100px 100px;
 }
 
 @layer components {
