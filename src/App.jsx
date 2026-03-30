@@ -4,7 +4,7 @@ import { useAuth } from './context/AuthContext';
 import { db } from './firebase';
 import { 
   collection, query, orderBy, limit, onSnapshot, 
-  addDoc, serverTimestamp 
+  addDoc, serverTimestamp, getCountFromServer
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminTerminal from './context/AdminTerminal';
@@ -12,6 +12,70 @@ import AdminTerminal from './context/AdminTerminal';
 import { loadTossPayments } from '@tosspayments/payment-sdk';
 
 // --- Components ---
+
+const WelcomeSplash = ({ user, visible }) => {
+  if (!user || !visible) return null;
+  return (
+    <motion.div 
+      initial={{ opacity: 0, x: -100 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 100 }}
+      className="fixed top-24 left-6 z-[100] max-w-sm pointer-events-none"
+    >
+      <div className="bg-black/90 dark:bg-sentinel-green dark:text-black text-sentinel-green p-6 rounded-[32px] shadow-2xl border border-sentinel-green/20 backdrop-blur-xl">
+        <h2 className="font-mono font-black text-xl mb-2 italic uppercase tracking-tight">Welcome, Operator</h2>
+        <p className="font-sans text-xs leading-relaxed font-bold opacity-90">
+          디지털 센티널 시스템에 접속하신 것을 환영합니다.<br/>
+          당신의 생존은 곧 실질적인 사회적 기여가 됩니다.
+        </p>
+        <div className="mt-4 flex gap-1">
+          <div className="w-8 h-1 bg-current rounded-full animate-pulse"></div>
+          <div className="w-2 h-1 bg-current rounded-full opacity-30"></div>
+          <div className="w-2 h-1 bg-current rounded-full opacity-30"></div>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+const UpdateNoteModal = ({ isOpen, onClose }) => {
+  if (!isOpen) return null;
+  const updates = [
+    { category: '보안', title: '다중 탭 감지 시스템(Rule 03) 도입', desc: '공정한 경쟁을 위해 단 하나의 활성 세션만 허용됩니다.' },
+    { category: '기능', title: '미니게임 점수 연동 강화', desc: '메모리 핵, 그리드 런 등 미니게임 점수가 생존 시간으로 자동 합산됩니다.' },
+    { category: 'UI/UX', title: '레이아웃 및 가독성 최적화', desc: '명예의 전당 재배치 및 Noto Sans KR 폰트 적용으로 사용성을 높였습니다.' },
+    { category: '기부', title: '토스 결제 및 자동 증서 발급', desc: '후원금의 50%가 자동 기부되며 실시간 증서 조회가 가능합니다.' },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[400] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 font-sans" onClick={onClose}>
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="max-w-xl w-full bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[40px] shadow-2xl overflow-hidden relative text-left"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/30 shadow-sm"></div>
+        <h2 className="text-2xl font-mono font-black mb-2 uppercase italic text-sentinel-green font-headline italic tracking-tight">System_Update_Note</h2>
+        <p className="text-gray-400 text-[10px] font-mono mb-8 uppercase tracking-[0.2em] font-black">Sentinel-OS Version 2.4.0</p>
+        
+        <div className="space-y-6">
+          {updates.map((upd, i) => (
+            <div key={i} className="group">
+              <div className="flex items-center gap-3 mb-1">
+                <span className="text-[10px] font-black font-mono text-sentinel-green bg-sentinel-green/10 px-2 py-0.5 rounded-full uppercase">{upd.category}</span>
+                <h4 className="text-sm font-bold text-black dark:text-white group-hover:text-sentinel-green transition-colors">{upd.title}</h4>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 pl-1">{upd.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        <button onClick={onClose} className="mt-10 w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-mono font-bold text-xs uppercase tracking-widest rounded-2xl hover:bg-sentinel-green hover:text-black transition-all shadow-xl font-headline">프로토콜 확인</button>
+      </motion.div>
+    </div>
+  );
+};
 
 const SponsorshipModal = ({ isOpen, onClose }) => {
   const [amount, setAmount] = useState(5000);
@@ -56,7 +120,7 @@ const SponsorshipModal = ({ isOpen, onClose }) => {
         <h2 className="text-xl font-mono font-black mb-2 uppercase italic text-sentinel-green italic font-headline tracking-tight">Sponsorship_Protocol</h2>
         <p className="text-gray-400 text-[10px] font-sans mb-8 uppercase tracking-[0.2em] font-black">시스템 유지 및 기부를 위한 후원</p>
         
-        <div className="space-y-6 text-left">
+        <div className="space-y-6">
           <div className="space-y-3">
             <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest px-1">Amount_Selection</p>
             <div className="grid grid-cols-3 gap-3">
@@ -101,7 +165,7 @@ const SponsorshipModal = ({ isOpen, onClose }) => {
           </button>
 
           <div className="relative py-2">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5 shadow-sm"></div></div>
             <div className="relative flex justify-center text-[8px] uppercase font-mono text-gray-600 bg-white dark:bg-[#0A0A0A] px-2 tracking-[0.3em] font-bold">International Support</div>
           </div>
 
@@ -163,8 +227,8 @@ const HallOfFame = () => {
         {patrons.length > 0 ? (
           patrons.map((patron, i) => (
             <div key={patron.id} className="flex items-center justify-between p-4 rounded-2xl bg-sentinel-green/5 border border-sentinel-green/10 relative overflow-hidden group">
-              <div className="absolute top-0 left-0 w-1 h-full bg-sentinel-green/30 group-hover:bg-sentinel-green transition-all"></div>
-              <div className="flex items-center gap-4 text-left">
+              <div className="absolute top-0 left-0 w-1 h-full bg-sentinel-green/30 group-hover:bg-sentinel-green transition-all shadow-sm"></div>
+              <div className="flex items-center gap-4">
                 <span className="font-mono font-black text-sentinel-green opacity-40">0{i+1}</span>
                 <div>
                   <div className="font-sans font-bold text-sm text-black dark:text-white flex items-center gap-2">
@@ -209,10 +273,10 @@ const DonationModal = ({ isOpen, onClose }) => {
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="max-w-2xl w-full bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl overflow-hidden relative"
+        className="max-w-2xl w-full bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl overflow-hidden relative shadow-xl"
         onClick={e => e.stopPropagation()}
       >
-        <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/30"></div>
+        <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/30 shadow-sm"></div>
         <h2 className="text-xl font-mono font-black mb-6 uppercase italic text-sentinel-green border-b border-sentinel-green/10 pb-4 italic font-headline">기부 증서 (Rule 04)</h2>
         
         <div className="flex flex-col md:flex-row gap-8 items-center text-left">
@@ -221,12 +285,12 @@ const DonationModal = ({ isOpen, onClose }) => {
               <p className="text-gray-400 font-sans text-[10px] uppercase tracking-widest mb-1 font-black">Total System Donation</p>
               <p className="text-2xl font-mono font-black text-black dark:text-white uppercase italic tracking-tighter text-left">총 기부금: <span className="text-sentinel-green">₩{totalDonation.toLocaleString()}</span></p>
             </div>
-            <div className="space-y-3 text-left">
-              <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed font-sans font-medium">
+            <div className="space-y-3">
+              <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed font-sans font-medium text-left">
                 모든 생존 기록과 여러분의 소중한 후원금은 시스템의 가상 기부금으로 환산됩니다. 
                 축적된 기록은 분기별로 실제 사회 공헌 활동에 사용됩니다.
               </p>
-              <div className="p-4 bg-sentinel-green/5 rounded-xl border border-sentinel-green/10 text-left">
+              <div className="p-4 bg-sentinel-green/5 rounded-xl border border-sentinel-green/10">
                 <p className="text-[11px] font-mono font-black text-sentinel-green uppercase tracking-tighter italic font-headline">
                   여러분의 후원금 중 50%인 ₩{(totalDonation * 0.5).toLocaleString()}이 기부되었습니다
                 </p>
@@ -235,24 +299,24 @@ const DonationModal = ({ isOpen, onClose }) => {
           </div>
           
           <div className="w-full md:w-64 aspect-[3/4] bg-black/10 dark:bg-white/5 rounded-2xl border border-dashed border-sentinel-green/20 flex items-center justify-center relative group overflow-hidden shadow-2xl">
-            <div className="absolute inset-0 bg-[url('https://api.placeholder.com/300/400')] bg-cover bg-center opacity-20 grayscale group-hover:grayscale-0 transition-all duration-700"></div>
-            <span className="relative z-10 text-gray-500 font-mono text-[10px] uppercase tracking-widest text-center px-4 group-hover:text-sentinel-green transition-colors font-black">CERTIFICATE_IMAGE_V2.4</span>
-            <div className="absolute inset-0 bg-sentinel-green/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl"></div>
+            <div className="absolute inset-0 bg-[url('https://api.placeholder.com/300/400')] bg-cover bg-center opacity-20 grayscale group-hover:grayscale-0 transition-all duration-700 shadow-sm"></div>
+            <span className="relative z-10 text-gray-500 font-mono text-[10px] uppercase tracking-widest text-center px-4 group-hover:text-sentinel-green transition-colors font-black text-center">CERTIFICATE_IMAGE_V2.4</span>
+            <div className="absolute inset-0 bg-sentinel-green/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl shadow-sm"></div>
           </div>
         </div>
 
-        <button onClick={onClose} className="mt-8 w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-mono font-bold text-xs uppercase tracking-widest rounded-2xl hover:bg-sentinel-green hover:text-black transition-all shadow-xl font-headline">확인 및 복귀</button>
+        <button onClick={onClose} className="mt-8 w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-mono font-bold text-xs uppercase tracking-widest rounded-2xl hover:bg-sentinel-green hover:text-black transition-all shadow-xl font-headline shadow-xl">확인 및 복귀</button>
       </motion.div>
     </div>
   );
 };
 
 const LiveDot = () => (
-  <div className="flex items-center gap-2 px-2 py-1 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-sentinel-green/10">
-    <div className="pulsing-green">
-      <span className="relative inline-flex rounded-full h-2 w-2 bg-sentinel-green"></span>
+  <div className="flex items-center gap-2 px-2 py-1 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-sentinel-green/10 shadow-sm">
+    <div className="pulsing-green shadow-sm">
+      <span className="relative inline-flex rounded-full h-2 w-2 bg-sentinel-green shadow-sm"></span>
     </div>
-    <span className="font-mono text-[8px] font-bold text-sentinel-green tracking-widest uppercase animate-pulse font-headline">Live</span>
+    <span className="font-mono text-[8px] font-bold text-sentinel-green tracking-widest uppercase animate-pulse font-headline shadow-sm">Live</span>
   </div>
 );
 
@@ -289,11 +353,11 @@ const ThemeToggle = () => {
       className="p-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 hover:bg-sentinel-green/20 transition-all group shadow-sm shadow-xl"
       title="테마 전환"
     >
-      <div className="w-5 h-5 flex items-center justify-center">
+      <div className="w-5 h-5 flex items-center justify-center shadow-sm">
         {isDark ? (
-          <span className="text-sentinel-green text-sm">🌙</span>
+          <span className="text-sentinel-green text-sm shadow-sm">🌙</span>
         ) : (
-          <span className="text-sentinel-green text-sm">☀️</span>
+          <span className="text-sentinel-green text-sm shadow-sm">☀️</span>
         )}
       </div>
     </button>
@@ -314,20 +378,20 @@ const MinigameHub = () => {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 text-left">
       {games.map((game, i) => (
         <div 
           key={i} 
           onClick={() => handleSimulateWin(game)}
           className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/10 p-5 rounded-3xl hover:border-sentinel-green/30 transition-all group cursor-pointer relative overflow-hidden shadow-sm active:scale-95 text-left"
         >
-          <div className="absolute top-0 right-0 p-3 opacity-20 font-mono text-[10px] uppercase tracking-widest font-black">v1.0</div>
-          <div className="text-2xl mb-3 group-hover:scale-110 transition-transform inline-block">{game.icon}</div>
-          <h4 className="font-mono font-black text-sm text-black dark:text-white mb-1 uppercase tracking-tighter italic font-headline">{game.title}</h4>
-          <p className="text-[10px] text-gray-500 font-sans uppercase tracking-widest leading-tight font-bold">{game.desc}</p>
-          <div className="mt-4 flex items-center gap-1 text-sentinel-green/40 font-mono text-[8px] uppercase font-black group-hover:text-sentinel-green transition-colors">
+          <div className="absolute top-0 right-0 p-3 opacity-20 font-mono text-[10px] uppercase tracking-widest font-black shadow-sm text-right">v1.0</div>
+          <div className="text-2xl mb-3 group-hover:scale-110 transition-transform inline-block shadow-sm"> {game.icon}</div>
+          <h4 className="font-mono font-black text-sm text-black dark:text-white mb-1 uppercase tracking-tighter italic font-headline text-left">{game.title}</h4>
+          <p className="text-[10px] text-gray-500 font-sans uppercase tracking-widest leading-tight font-bold text-left">{game.desc}</p>
+          <div className="mt-4 flex items-center gap-1 text-sentinel-green/40 font-mono text-[8px] uppercase font-black group-hover:text-sentinel-green transition-colors text-left shadow-sm">
             <span>Click to complete</span>
-            <span className="animate-pulse">_</span>
+            <span className="animate-pulse shadow-sm">_</span>
           </div>
         </div>
       ))}
@@ -342,25 +406,25 @@ const ShortcutGuide = ({ isOpen, onClose }) => {
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="max-w-md w-full bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl"
+        className="max-w-md w-full bg-white dark:bg-[#0A0A0A] border border-sentinel-green/20 p-8 rounded-[32px] shadow-2xl shadow-xl"
         onClick={e => e.stopPropagation()}
       >
-        <h2 className="text-xl font-mono font-black mb-6 uppercase italic text-sentinel-green border-b border-sentinel-green/10 pb-4 italic font-headline">시스템 단축키 안내</h2>
-        <div className="space-y-4 font-mono text-sm">
+        <h2 className="text-xl font-mono font-black mb-6 uppercase italic text-sentinel-green border-b border-sentinel-green/10 pb-4 italic font-headline text-left">시스템 단축키 안내</h2>
+        <div className="space-y-4 font-mono text-sm text-left">
           <div className="flex justify-between items-center text-black dark:text-white">
-            <span className="text-gray-400 font-bold">명령어 터미널</span>
-            <span className="bg-gray-100 dark:bg-white/10 px-3 py-1 rounded-lg border border-black/10 dark:border-white/10 font-black">Shift + Q</span>
+            <span className="text-gray-400 font-bold text-left">명령어 터미널</span>
+            <span className="bg-gray-100 dark:bg-white/10 px-3 py-1 rounded-lg border border-black/10 dark:border-white/10 font-black shadow-sm text-right">Shift + Q</span>
           </div>
-          <div className="flex justify-between items-center text-black dark:text-white">
-            <span className="text-gray-400 font-bold">도움말</span>
-            <span className="bg-gray-100 dark:bg-white/10 px-3 py-1 rounded-lg border border-black/10 dark:border-white/10 font-black">Shift + /</span>
+          <div className="flex justify-between items-center text-black dark:text-white text-left">
+            <span className="text-gray-400 font-bold text-left">도움말</span>
+            <span className="bg-gray-100 dark:bg-white/10 px-3 py-1 rounded-lg border border-black/10 dark:border-white/10 font-black shadow-sm text-right">Shift + /</span>
           </div>
-          <div className="flex justify-between items-center text-black dark:text-white">
-            <span className="text-gray-400 font-bold">테마 전환</span>
-            <span className="bg-gray-100 dark:bg-white/10 px-3 py-1 rounded-lg border border-black/10 dark:border-white/10 font-black">Shift + T</span>
+          <div className="flex justify-between items-center text-black dark:text-white text-left">
+            <span className="text-gray-400 font-bold text-left">테마 전환</span>
+            <span className="bg-gray-100 dark:bg-white/10 px-3 py-1 rounded-lg border border-black/10 dark:border-white/10 font-black shadow-sm text-right">Shift + T</span>
           </div>
         </div>
-        <button onClick={onClose} className="mt-8 w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-mono font-bold text-xs uppercase tracking-widest rounded-2xl hover:bg-sentinel-green hover:text-black transition-all shadow-lg font-headline">시스템으로 복귀</button>
+        <button onClick={onClose} className="mt-8 w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-mono font-bold text-xs uppercase tracking-widest rounded-2xl hover:bg-sentinel-green hover:text-black transition-all shadow-lg font-headline shadow-xl text-center">시스템으로 복귀</button>
       </motion.div>
     </div>
   );
@@ -392,20 +456,20 @@ const NicknameModal = () => {
         animate={{ scale: 1, opacity: 1 }}
         className="max-w-md w-full bg-white dark:bg-sentinel-dark-card border border-sentinel-green/20 p-12 rounded-[40px] shadow-2xl relative overflow-hidden shadow-xl"
       >
-        <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/20"></div>
+        <div className="absolute top-0 left-0 w-full h-1 bg-sentinel-green/20 shadow-sm"></div>
         <h2 className="text-3xl font-mono font-black mb-2 italic uppercase tracking-tighter text-black dark:text-white font-headline italic tracking-tight text-left">ID 초기화</h2>
         <p className="text-gray-400 text-[10px] font-sans mb-10 uppercase tracking-[0.2em] font-black text-left">운영자 코드 등록이 필요합니다</p>
-        <form onSubmit={handleSubmit} className="space-y-8">
-          <div className="relative">
+        <form onSubmit={handleSubmit} className="space-y-8 text-left">
+          <div className="relative text-left">
             <input 
               type="text" 
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
               placeholder="운영자_ID"
-              className="w-full px-6 py-5 bg-black/5 dark:bg-black/40 border border-sentinel-green/10 rounded-2xl font-mono text-sm focus:ring-1 focus:ring-sentinel-green/50 outline-none text-black dark:text-white placeholder:text-gray-300 transition-all font-black shadow-inner"
+              className="w-full px-6 py-5 bg-black/5 dark:bg-black/40 border border-sentinel-green/10 rounded-2xl font-mono text-sm focus:ring-1 focus:ring-sentinel-green/50 outline-none text-black dark:text-white placeholder:text-gray-300 transition-all font-black shadow-inner text-left"
               autoFocus
             />
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 w-2 h-2 bg-sentinel-green/20 rounded-full"></div>
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 w-2 h-2 bg-sentinel-green/20 rounded-full shadow-sm"></div>
           </div>
           {error && (
             <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-xl shadow-sm text-left">
@@ -414,7 +478,7 @@ const NicknameModal = () => {
           )}
           <button 
             disabled={isSubmitting}
-            className={`w-full bg-black dark:bg-sentinel-green dark:text-black text-sentinel-green font-mono font-black py-5 rounded-2xl hover:bg-sentinel-green hover:text-black transition-all uppercase tracking-[0.3em] text-xs shadow-lg ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''} font-headline`}
+            className={`w-full bg-black dark:bg-sentinel-green dark:text-black text-sentinel-green font-mono font-black py-5 rounded-2xl hover:bg-sentinel-green hover:text-black transition-all uppercase tracking-[0.3em] text-xs shadow-lg ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''} font-headline shadow-xl text-center`}
           >
             {isSubmitting ? '코드 등록 중...' : '프로토콜 배포'}
           </button>
@@ -424,36 +488,42 @@ const NicknameModal = () => {
   );
 };
 
-const LeaderboardTable = () => {
+const LeaderboardTable = ({ onRankUpdate }) => {
   const { formatTime } = useTimer();
   const { user } = useAuth();
   const [competitors, setCompetitors] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, 'users'), orderBy('survival_time', 'desc'), limit(10));
+    const q = query(collection(db, 'users'), orderBy('survival_time', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setCompetitors(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setCompetitors(data.slice(0, 10));
+      
+      if (user) {
+        const index = data.findIndex(u => u.id === user.uid);
+        onRankUpdate && onRankUpdate(index !== -1 ? index + 1 : 'PENDING...', data.length);
+      }
       setLoading(false);
     }, (error) => {
       console.error("Leaderboard Snapshot Error:", error);
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [user, onRankUpdate]);
 
   return (
     <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-sm h-full font-sans text-left">
-      <table className="w-full text-left border-collapse">
+      <table className="w-full text-left border-collapse shadow-sm">
         <thead>
-          <tr className="bg-sentinel-green/5 border-b border-sentinel-green/10">
-            <th className="px-8 py-5 font-mono text-[10px] uppercase tracking-widest text-sentinel-green/60 font-black italic">순위</th>
-            <th className="px-8 py-5 font-mono text-[10px] uppercase tracking-widest text-sentinel-green/60 font-black italic text-left">운영자</th>
-            <th className="px-8 py-5 font-mono text-[10px] uppercase tracking-widest text-sentinel-green/60 text-center font-black italic">상태</th>
-            <th className="px-8 py-5 font-mono text-[10px] uppercase tracking-widest text-sentinel-green/60 text-right font-black italic">생존 시간</th>
+          <tr className="bg-sentinel-green/5 border-b border-sentinel-green/10 shadow-sm">
+            <th className="px-8 py-5 font-mono text-[10px] uppercase tracking-widest text-sentinel-green/60 font-black italic shadow-sm text-left">순위</th>
+            <th className="px-8 py-5 font-mono text-[10px] uppercase tracking-widest text-sentinel-green/60 font-black italic text-left shadow-sm">운영자</th>
+            <th className="px-8 py-5 font-mono text-[10px] uppercase tracking-widest text-sentinel-green/60 text-center font-black italic shadow-sm">상태</th>
+            <th className="px-8 py-5 font-mono text-[10px] uppercase tracking-widest text-sentinel-green/60 text-right font-black italic shadow-sm">생존 시간</th>
           </tr>
         </thead>
-        <tbody className="relative min-h-[400px]">
+        <tbody className="relative min-h-[400px] text-left">
           <AnimatePresence mode="popLayout">
             {competitors.length > 0 ? (
               competitors.map((comp, index) => {
@@ -470,32 +540,32 @@ const LeaderboardTable = () => {
                     }}
                     exit={{ opacity: 0 }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    className={`border-b border-sentinel-green/5 group transition-colors hover:bg-sentinel-green/5 dark:hover:bg-sentinel-green/10 shadow-sm ${isMe ? 'ring-1 ring-inset ring-sentinel-green/20' : ''}`}
+                    className={`border-b border-sentinel-green/5 group transition-colors hover:bg-sentinel-green/5 dark:hover:bg-sentinel-green/10 shadow-sm ${isMe ? 'ring-1 ring-inset ring-sentinel-green/20 shadow-[0_0_15px_rgba(0,255,148,0.05)]' : ''} shadow-sm`}
                   >
-                    <td className="px-8 py-6 font-mono font-black text-xl text-sentinel-green flex items-center gap-2 tracking-tighter">
-                      {index === 0 ? <span className="text-2xl drop-shadow-lg">🥇</span> : `#${String(index + 1).padStart(2, '0')}`}
+                    <td className="px-8 py-6 font-mono font-black text-xl text-sentinel-green flex items-center gap-2 tracking-tighter shadow-sm text-left">
+                      {index === 0 ? <span className="text-2xl drop-shadow-lg shadow-sm">🥇</span> : `#${String(index + 1).padStart(2, '0')}`}
                     </td>
-                    <td className="px-8 py-6">
-                      <div className="flex items-center gap-4 text-left">
-                        <img src={comp.photoURL || 'https://via.placeholder.com/32'} className="w-8 h-8 rounded-full border border-sentinel-green/10 shadow-sm" />
-                        <div>
-                          <div className={`font-sans font-bold text-sm leading-none mb-1 ${isMe ? 'text-sentinel-green' : 'text-black dark:text-white'}`}>
+                    <td className="px-8 py-6 shadow-sm">
+                      <div className="flex items-center gap-4 text-left shadow-sm">
+                        <img src={comp.photoURL || 'https://via.placeholder.com/32'} className="w-8 h-8 rounded-full border border-sentinel-green/10 shadow-sm shadow-xl shadow-sm" />
+                        <div className="text-left">
+                          <div className={`font-sans font-bold text-sm leading-none mb-1 text-left shadow-sm ${isMe ? 'text-sentinel-green font-black' : 'text-black dark:text-white'}`}>
                             {comp.nickname || 'Unknown'}
-                            {isMe && <span className="ml-2 text-[10px] bg-sentinel-green/20 px-1.5 py-0.5 rounded uppercase tracking-tighter font-black">You</span>}
+                            {isMe && <span className="ml-2 text-[10px] bg-sentinel-green/20 px-1.5 py-0.5 rounded uppercase tracking-tighter font-black font-sans shadow-sm">You</span>}
                           </div>
-                          <div className="font-mono text-[8px] text-gray-400 uppercase tracking-widest font-black opacity-60 text-left">{comp.id.substring(0, 10)}</div>
+                          <div className="font-mono text-[8px] text-gray-400 uppercase tracking-widest font-black opacity-60 text-left shadow-sm">{comp.id.substring(0, 10)}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-8 py-6 text-center">
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest font-headline shadow-sm ${
-                        comp.status === 'ONLINE' ? 'bg-sentinel-green/10 text-sentinel-green' : 'bg-gray-100 dark:bg-white/5 text-gray-400 opacity-50'
+                    <td className="px-8 py-6 text-center shadow-sm text-center">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest font-headline shadow-sm shadow-xl ${
+                        comp.status === 'ONLINE' ? 'bg-sentinel-green/10 text-sentinel-green shadow-[0_0_10px_rgba(0,255,148,0.1)] shadow-sm' : 'bg-gray-100 dark:bg-white/5 text-gray-400 opacity-50 shadow-sm'
                       }`}>
-                        <span className={`w-1 h-1 rounded-full ${comp.status === 'ONLINE' ? 'bg-sentinel-green animate-pulse shadow-[0_0_5px_rgba(0,255,148,0.8)]' : 'bg-gray-400'}`}></span>
+                        <span className={`w-1 h-1 rounded-full ${comp.status === 'ONLINE' ? 'bg-sentinel-green animate-pulse shadow-[0_0_5px_rgba(0,255,148,0.8)] shadow-sm' : 'bg-gray-400 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm'}`}></span>
                         {comp.status === 'ONLINE' ? '실시간' : '오프라인'}
                       </span>
                     </td>
-                    <td className={`px-8 py-6 text-right font-mono font-bold text-sm tracking-widest italic ${isMe ? 'text-sentinel-green scale-110' : 'text-black dark:text-white'}`}>
+                    <td className={`px-8 py-6 text-right font-mono font-bold text-sm tracking-widest italic shadow-sm text-right ${isMe ? 'text-sentinel-green scale-110 drop-shadow-[0_0_8px_rgba(0,255,148,0.4)] shadow-sm' : 'text-black dark:text-white shadow-sm'}`}>
                       {formatTime(comp.survival_time || 0)}
                     </td>
                   </motion.tr>
@@ -503,8 +573,8 @@ const LeaderboardTable = () => {
               })
             ) : (
               <tr>
-                <td colSpan="4" className="px-8 py-20 text-center">
-                  <div className="font-mono text-sm text-gray-400 uppercase tracking-[0.3em] font-black shadow-sm text-center">
+                <td colSpan="4" className="px-8 py-20 text-center shadow-sm">
+                  <div className="font-mono text-sm text-gray-400 uppercase tracking-[0.3em] font-black shadow-sm text-center shadow-sm">
                     {loading ? '데이터 동기화 중...' : <TypingText text="생존자를 탐색 중입니다..." />}
                   </div>
                 </td>
@@ -549,21 +619,21 @@ const Chat = () => {
   };
 
   return (
-    <aside className="w-full lg:w-80 flex flex-col bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden h-full backdrop-blur-sm shadow-sm font-sans text-left text-left shadow-xl">
-      <div className="p-6 border-b border-sentinel-green/10 bg-sentinel-green/5 flex items-center justify-between">
-        <h3 className="font-mono font-black text-xs tracking-tighter flex items-center gap-2 uppercase italic text-sentinel-green font-headline tracking-tight">
+    <aside className="w-full lg:w-80 flex flex-col bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden h-full backdrop-blur-sm shadow-sm font-sans text-left shadow-xl">
+      <div className="p-6 border-b border-sentinel-green/10 bg-sentinel-green/5 flex items-center justify-between shadow-sm shadow-xl shadow-sm">
+        <h3 className="font-mono font-black text-xs tracking-tighter flex items-center gap-2 uppercase italic text-sentinel-green font-headline tracking-tight text-left">
           라이브 채널
         </h3>
         <LiveDot />
       </div>
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide text-left">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide text-left shadow-inner">
         {messages.map(msg => (
-          <div key={msg.id} className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className={`font-mono text-[9px] font-black uppercase tracking-tighter ${msg.role === 'ADMIN' ? 'text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)]' : 'text-sentinel-green'}`}>{msg.nickname}</span>
-              <span className="font-mono text-[8px] text-gray-500 font-bold opacity-60 font-sans">{(msg.timestamp?.toMillis ? new Date(msg.timestamp.toMillis()) : new Date()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+          <div key={msg.id} className="space-y-1 text-left">
+            <div className="flex items-center justify-between text-left">
+              <span className={`font-mono text-[9px] font-black uppercase tracking-tighter ${msg.role === 'ADMIN' ? 'text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)]' : 'text-sentinel-green'} text-left`}>{msg.nickname}</span>
+              <span className="font-mono text-[8px] text-gray-500 font-bold opacity-60 font-sans text-right">{(msg.timestamp?.toMillis ? new Date(msg.timestamp.toMillis()) : new Date()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
             </div>
-            <p className={`p-3 rounded-2xl text-xs leading-relaxed border font-sans font-black ${
+            <p className={`p-3 rounded-2xl text-xs leading-relaxed border font-sans font-black shadow-sm ${
               msg.role === 'ADMIN' ? 'bg-red-500/10 border-red-500/20 text-red-500 font-bold shadow-sm' : 'bg-black/20 dark:bg-black/40 border-sentinel-green/5 text-gray-700 dark:text-gray-300 shadow-sm'
             }`}>
               {msg.text}
@@ -571,19 +641,19 @@ const Chat = () => {
           </div>
         ))}
       </div>
-      <div className="p-6 bg-sentinel-green/5 border-t border-sentinel-green/10">
+      <div className="p-6 bg-sentinel-green/5 border-t border-sentinel-green/10 shadow-xl shadow-sm">
         {user ? (
-          <form onSubmit={sendMessage}>
+          <form onSubmit={sendMessage} className="text-left">
             <input 
               value={input} onChange={e => setInput(e.target.value)}
-              className="w-full bg-black/10 dark:bg-black/40 border border-sentinel-green/20 px-4 py-3 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-sentinel-green/50 transition-all font-mono text-black dark:text-white placeholder:text-gray-400 font-black shadow-inner"
+              className="w-full bg-black/10 dark:bg-black/40 border border-sentinel-green/20 px-4 py-3 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-sentinel-green/50 transition-all font-mono text-black dark:text-white placeholder:text-gray-400 font-black shadow-inner text-left"
               placeholder="시스템 통신 브로드캐스트..."
             />
           </form>
         ) : (
-          <div className="text-center py-2 text-center">
-            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest mb-3 italic font-black opacity-60 font-sans">통신을 위해 권한이 필요합니다</p>
-            <button onClick={() => window.scrollTo(0, 0)} className="w-full bg-black dark:bg-sentinel-green dark:text-black text-sentinel-green py-3 rounded-xl font-mono font-black text-[10px] uppercase border border-sentinel-green/20 hover:bg-sentinel-green hover:text-black transition-all shadow-lg font-headline">보안 엑세스</button>
+          <div className="text-center py-2 text-center shadow-sm">
+            <p className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-widest mb-3 italic font-black opacity-60 font-sans text-center">통신을 위해 권한이 필요합니다</p>
+            <button onClick={() => window.scrollTo(0, 0)} className="w-full bg-black dark:bg-sentinel-green dark:text-black text-sentinel-green py-3 rounded-xl font-mono font-black text-[10px] uppercase border border-sentinel-green/20 hover:bg-sentinel-green hover:text-black transition-all shadow-lg font-headline shadow-xl text-center shadow-xl">보안 엑세스</button>
           </div>
         )}
       </div>
@@ -600,6 +670,34 @@ function App() {
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isDonationOpen, setIsDonationOpen] = useState(false);
   const [isSponsorshipOpen, setIsSponsorshipOpen] = useState(false);
+  const [isUpdateNoteOpen, setIsUpdateNoteOpen] = useState(false);
+  const [showSplash, setShowSplash] = useState(false);
+  const [competitorStats, setCompetitorStats] = useState({ count: 0, myRank: 'PENDING...' });
+
+  useEffect(() => {
+    if (user && !showSplash) {
+      setShowSplash(true);
+      const timer = setTimeout(() => setShowSplash(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [user, showSplash]);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const coll = collection(db, 'users');
+        const snapshot = await getCountFromServer(coll);
+        setCompetitorStats(prev => ({ ...prev, count: snapshot.data().count }));
+      } catch (error) {
+        console.error("Fetch stats error:", error);
+      }
+    };
+    fetchStats();
+  }, []);
+
+  const handleRankUpdate = (rank, count) => {
+    setCompetitorStats({ count, myRank: rank });
+  };
 
   // 결제 결과 확인 및 기록
   useEffect(() => {
@@ -657,18 +755,20 @@ function App() {
   }, [isAdmin]);
 
   return (
-    <div className="min-h-screen bg-white dark:bg-sentinel-dark-bg text-black dark:text-white selection:bg-sentinel-green selection:text-black antialiased transition-colors duration-500 font-sans text-left overflow-x-hidden">
+    <div className="min-h-screen bg-white dark:bg-sentinel-dark-bg text-black dark:text-white selection:bg-sentinel-green selection:text-black antialiased transition-colors duration-500 font-sans text-left overflow-x-hidden shadow-sm">
+      <WelcomeSplash user={user} visible={showSplash} />
+      
       {(!isActive || isTerminated) && (
-        <div className="fixed inset-0 z-[200] bg-white/95 dark:bg-black/95 backdrop-blur-xl flex items-center justify-center p-6 text-center">
-          <div className="max-w-md w-full space-y-8 font-sans text-center">
-            <div className={`w-24 h-24 rounded-3xl mx-auto flex items-center justify-center shadow-2xl rotate-12 ${isTerminated ? 'bg-red-500 shadow-red-500/20' : 'bg-sentinel-green shadow-sentinel-green/20'}`}>
-              <span className="text-4xl drop-shadow-xl">{isTerminated ? '🚫' : '⚠️'}</span>
+        <div className="fixed inset-0 z-[200] bg-white/95 dark:bg-black/95 backdrop-blur-xl flex items-center justify-center p-6 text-center shadow-2xl shadow-xl">
+          <div className="max-w-md w-full space-y-8 font-sans text-center shadow-sm">
+            <div className={`w-24 h-24 rounded-3xl mx-auto flex items-center justify-center shadow-2xl rotate-12 ${isTerminated ? 'bg-red-500 shadow-red-500/20' : 'bg-sentinel-green shadow-sentinel-green/20 shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm'}`}>
+              <span className="text-4xl drop-shadow-xl shadow-sm">🛡️</span>
             </div>
-            <div className="text-center">
-              <h2 className="text-3xl font-mono font-black mb-2 tracking-tighter uppercase italic text-black dark:text-white font-headline drop-shadow-sm">
+            <div className="text-center shadow-sm">
+              <h2 className="text-3xl font-mono font-black mb-2 tracking-tighter uppercase italic text-black dark:text-white font-headline drop-shadow-sm shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm">
                 {isTerminated ? '종료됨' : '이미 실행 중'}
               </h2>
-              <p className="text-gray-400 font-sans text-[10px] uppercase tracking-widest leading-relaxed whitespace-pre-line font-black opacity-80 italic">
+              <p className="text-gray-400 font-sans text-[10px] uppercase tracking-widest leading-relaxed whitespace-pre-line font-black opacity-80 italic shadow-sm">
                 {isTerminated 
                   ? '관리자 명령에 의해 세션이 강제 종료되었습니다.' 
                   : 'Rule-03 위반: 다른 탭에서 이미 실행 중입니다.\n이 탭에서 계속하려면 아래 버튼을 누르세요.'}
@@ -677,7 +777,7 @@ function App() {
             {!isTerminated && (
               <button 
                 onClick={resumeHere}
-                className="w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-mono font-black text-xs uppercase tracking-widest rounded-2xl hover:scale-[1.02] transition-all font-headline shadow-lg hover:shadow-sentinel-green/20 shadow-xl"
+                className="w-full py-4 bg-black dark:bg-sentinel-green dark:text-black text-white font-mono font-black text-xs uppercase tracking-widest rounded-2xl hover:scale-[1.02] transition-all font-headline shadow-lg hover:shadow-sentinel-green/20 shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm"
               >
                 이 탭에서 계속하기
               </button>
@@ -686,23 +786,29 @@ function App() {
         </div>
       )}
 
-      <header className="fixed top-0 left-0 w-full z-[100] px-6 py-4 flex justify-between items-center pointer-events-none">
-        <div className="pointer-events-auto">
-          <div className="bg-black dark:bg-sentinel-green text-sentinel-green dark:text-black font-mono font-black px-4 py-2 rounded-xl text-xs uppercase tracking-tighter italic shadow-2xl font-headline tracking-tight">
+      <header className="fixed top-0 left-0 w-full z-[100] px-6 py-4 flex justify-between items-center pointer-events-none shadow-sm shadow-sm">
+        <div className="pointer-events-auto shadow-sm">
+          <div className="bg-black dark:bg-sentinel-green text-sentinel-green dark:text-black font-mono font-black px-4 py-2 rounded-xl text-xs uppercase tracking-tighter italic shadow-2xl shadow-xl font-headline tracking-tight shadow-sm text-left shadow-sm">
             Sentinel v2.4
           </div>
         </div>
-        <div className="pointer-events-auto flex items-center gap-3">
+        <div className="pointer-events-auto flex items-center gap-3 shadow-xl shadow-xl shadow-sm shadow-sm">
+          <button 
+            onClick={() => setIsUpdateNoteOpen(true)}
+            className="px-4 py-2 text-gray-400 font-sans font-black text-[10px] uppercase tracking-widest hover:text-sentinel-green transition-all font-bold shadow-sm text-center"
+          >
+            업데이트 노트
+          </button>
           <button 
             onClick={() => setIsSponsorshipOpen(true)}
-            className="px-4 py-2 rounded-xl border border-sentinel-green/50 text-sentinel-green font-sans font-black text-[10px] uppercase tracking-widest hover:bg-sentinel-green hover:text-black transition-all shadow-xl font-headline shadow-inner"
+            className="px-4 py-2 rounded-xl border border-sentinel-green/50 text-sentinel-green font-sans font-black text-[10px] uppercase tracking-widest hover:bg-sentinel-green hover:text-black transition-all shadow-xl font-headline shadow-inner shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm text-center shadow-xl shadow-xl shadow-xl"
           >
             후원하기
           </button>
           <ThemeToggle />
           <button 
             onClick={() => setIsGuideOpen(true)}
-            className="p-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 hover:bg-sentinel-green/20 transition-all group shadow-sm text-black dark:text-white font-black text-sm shadow-xl"
+            className="p-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 hover:bg-sentinel-green/20 transition-all group shadow-sm text-black dark:text-white font-black text-sm shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm text-center shadow-xl shadow-xl shadow-xl shadow-xl"
           >
             ?
           </button>
@@ -710,104 +816,108 @@ function App() {
       </header>
 
       {user ? (
-        <div className="max-w-7xl mx-auto px-4 pt-24 pb-12 grid grid-cols-1 lg:grid-cols-12 gap-8 min-h-screen text-left">
+        <div className="max-w-7xl mx-auto px-4 pt-24 pb-12 grid grid-cols-1 lg:grid-cols-12 gap-8 min-h-screen text-left text-left text-left text-left shadow-sm">
           {/* Left Column */}
-          <div className="lg:col-span-8 space-y-8">
+          <div className="lg:col-span-8 space-y-8 text-left text-left shadow-sm">
             {/* Modules Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left text-left text-left text-left shadow-sm shadow-sm">
               {/* Module 1: Status */}
-              <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm relative overflow-hidden group shadow-sm transition-all hover:shadow-sentinel-green/5 text-left font-sans shadow-xl">
-                <div className="flex justify-between items-start mb-6">
-                  <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight">Module_01: 시스템_상태</h3>
+              <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm relative overflow-hidden group shadow-sm transition-all hover:shadow-sentinel-green/5 text-left font-sans shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm text-left shadow-xl shadow-xl">
+                <div className="flex justify-between items-start mb-6 text-left shadow-sm">
+                  <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm">Module_01: 시스템_상태</h3>
                   <LiveDot />
                 </div>
-                <h1 className="text-3xl font-mono font-black tracking-tighter uppercase italic text-black dark:text-white mb-2 font-headline italic">디지털 센티널</h1>
-                <div className="flex flex-wrap items-center gap-4 text-left">
-                  <p className="font-sans text-[10px] text-gray-500 uppercase tracking-widest font-black opacity-80">
-                    오늘의 경쟁자: <span className="text-sentinel-green font-black">1,248명</span>
+                <h1 className="text-3xl font-mono font-black tracking-tighter uppercase italic text-black dark:text-white mb-2 font-headline italic italic italic italic text-left shadow-sm">디지털 센티널</h1>
+                <div className="flex flex-wrap items-center gap-4 text-left text-left text-left shadow-sm shadow-sm">
+                  <p className="font-sans text-[10px] text-gray-500 uppercase tracking-widest font-black opacity-80 font-bold text-left shadow-sm shadow-sm shadow-sm">
+                    오늘의 경쟁자: <span className="text-sentinel-green font-black shadow-sm">{competitorStats.count.toLocaleString()}명</span>
                   </p>
-                  <div className="h-4 w-px bg-gray-200 dark:bg-white/10"></div>
+                  <div className="h-4 w-px bg-gray-200 dark:bg-white/10 shadow-sm shadow-sm shadow-sm shadow-sm"></div>
+                  <p className="font-sans text-[10px] text-gray-500 uppercase tracking-widest font-black opacity-80 font-bold text-left shadow-sm shadow-sm shadow-sm">
+                    나의 현재 순위: <span className="text-sentinel-green font-black underline decoration-sentinel-green/30 shadow-sm">{competitorStats.myRank}위</span>
+                  </p>
+                  <div className="h-4 w-px bg-gray-200 dark:bg-white/10 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm"></div>
                   <button 
                     onClick={() => setIsDonationOpen(true)}
-                    className="font-sans text-[10px] text-sentinel-green hover:underline uppercase tracking-widest font-black italic font-headline"
+                    className="font-sans text-[10px] text-sentinel-green hover:underline uppercase tracking-widest font-black italic font-headline font-bold italic shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-center shadow-sm"
                   >
                     기부 확인증
                   </button>
                 </div>
-                <div className="mt-8 flex gap-1.5 shadow-inner">
+                <div className="mt-8 flex gap-1.5 shadow-inner shadow-inner shadow-inner shadow-inner shadow-sm shadow-sm shadow-sm">
                   {[...Array(15)].map((_, i) => (
-                    <div key={i} className={`h-1.5 w-full rounded-full transition-all duration-1000 ${i < 10 ? 'bg-sentinel-green shadow-[0_0_8px_rgba(0,255,148,0.5)]' : 'bg-gray-100 dark:bg-white/5'}`}></div>
+                    <div key={i} className={`h-1.5 w-full rounded-full transition-all duration-1000 ${i < 10 ? 'bg-sentinel-green shadow-[0_0_8px_rgba(0,255,148,0.5)] shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm' : 'bg-gray-100 dark:bg-white/5 shadow-sm shadow-sm'}`}></div>
                   ))}
                 </div>
               </div>
 
               {/* Module 2: Survival Timer */}
-              <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm relative shadow-sm hover:shadow-sentinel-green/5 transition-all text-left shadow-xl">
-                <div className="flex justify-between items-start mb-6 font-sans">
-                  <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left">Module_02: 생존_카운트</h3>
+              <div className="bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-[40px] p-8 backdrop-blur-sm relative shadow-sm hover:shadow-sentinel-green/5 transition-all text-left shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm text-left shadow-xl shadow-xl shadow-xl">
+                <div className="flex justify-between items-start mb-6 font-sans text-left text-left text-left shadow-sm">
+                  <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm shadow-sm shadow-sm">Module_02: 생존_카운트</h3>
                   <LiveDot />
                 </div>
-                <div className="flex flex-col justify-center py-2 text-left">
-                  <p className={`font-mono text-5xl font-black tracking-[0.2em] glow-green drop-shadow-2xl italic transition-all duration-300 ${bonusPulse ? 'text-white scale-110 shadow-[0_0_30px_rgba(0,255,148,0.6)]' : 'text-sentinel-green'}`}>
+                <div className="flex flex-col justify-center py-2 text-left text-left text-left shadow-sm shadow-sm">
+                  <p className={`font-mono text-5xl font-black tracking-[0.2em] glow-green drop-shadow-2xl italic transition-all duration-300 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm ${bonusPulse ? 'text-white scale-110 shadow-[0_0_30px_rgba(0,255,148,0.6)] shadow-xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm' : 'text-sentinel-green shadow-sm shadow-sm'}`}>
                     {formatTime(survivalTime)}
                   </p>
-                  <p className="font-mono text-[8px] text-gray-400 dark:text-gray-500 mt-4 uppercase tracking-[0.2em] font-black font-sans italic opacity-60">10초마다 데이터 클라우드 동기화 중...</p>
+                  <p className="font-mono text-[8px] text-gray-400 dark:text-gray-500 mt-4 uppercase tracking-[0.2em] font-black font-sans italic opacity-60 font-black italic font-sans italic opacity-60 shadow-sm shadow-sm shadow-sm text-left shadow-sm shadow-sm">10초마다 데이터 클라우드 동기화 중...</p>
                 </div>
               </div>
             </div>
 
             {/* Module 3: Hall of Fame & Leaderboard (Swapped) */}
-            <div className="space-y-4 text-left font-sans">
-              <div className="flex items-center justify-between px-4 font-sans font-black">
-                <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight">Module_03: 실시간_데이터_센터</h3>
-                <span className="font-mono text-[9px] text-sentinel-green/60 uppercase italic tracking-widest font-headline italic">NETWORK_ACTIVE</span>
+            <div className="space-y-4 text-left font-sans text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm">
+              <div className="flex items-center justify-between px-4 font-sans font-black font-sans font-black font-sans font-black font-sans font-black shadow-sm shadow-sm shadow-sm shadow-sm">
+                <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm shadow-sm shadow-sm">Module_03: 실시간_데이터_센터</h3>
+                <span className="font-mono text-[9px] text-sentinel-green/60 uppercase italic tracking-widest font-headline italic italic italic italic italic italic shadow-sm shadow-sm shadow-sm text-right shadow-sm shadow-sm shadow-sm shadow-sm">NETWORK_ACTIVE</span>
               </div>
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
-                <div className="space-y-4 order-2 xl:order-1 h-full shadow-lg">
-                  <p className="font-mono text-[8px] text-gray-500 uppercase px-2 tracking-widest font-black font-headline opacity-60 text-left">Patron_Hall_of_Fame</p>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm">
+                <div className="space-y-4 order-2 xl:order-1 h-full shadow-lg shadow-lg shadow-lg shadow-lg shadow-lg shadow-lg shadow-lg shadow-sm shadow-sm text-left shadow-sm shadow-sm">
+                  <p className="font-mono text-[8px] text-gray-500 uppercase px-2 tracking-widest font-black font-headline opacity-60 text-left text-left text-left shadow-sm shadow-sm shadow-sm text-left shadow-sm">Patron_Hall_of_Fame</p>
                   <HallOfFame />
                 </div>
-                <div className="space-y-4 order-1 xl:order-2 h-full shadow-lg">
-                  <p className="font-mono text-[8px] text-gray-500 uppercase px-2 tracking-widest font-black font-headline opacity-60 text-left">Live_Survival_Rank</p>
-                  <LeaderboardTable />
+                <div className="space-y-4 order-1 xl:order-2 h-full shadow-lg shadow-lg shadow-lg shadow-lg shadow-lg shadow-lg shadow-lg shadow-sm shadow-sm text-left shadow-sm shadow-sm">
+                  <p className="font-mono text-[8px] text-gray-500 uppercase px-2 tracking-widest font-black font-headline opacity-60 text-left text-left text-left shadow-sm shadow-sm shadow-sm text-left shadow-sm">Live_Survival_Rank</p>
+                  <LeaderboardTable onRankUpdate={handleRankUpdate} />
                 </div>
               </div>
             </div>
 
             {/* Minigame Hub */}
-            <div className="pt-4 font-sans text-left">
-              <div className="flex items-center justify-between px-4 mb-4">
-                <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight">Module_05: 미니게임_허브</h3>
+            <div className="pt-4 font-sans text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm">
+              <div className="flex items-center justify-between px-4 mb-4 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
+                <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Module_05: 미니게임_허브</h3>
               </div>
               <MinigameHub />
             </div>
           </div>
 
           {/* Right Column: Communication */}
-          <div className="lg:col-span-4 h-full flex flex-col space-y-4 font-sans text-left">
-            <div className="flex items-center justify-between px-2 text-left">
-              <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight">Module_04: 시스템_통신</h3>
-              <span className="font-mono text-[9px] text-sentinel-green/60 uppercase italic font-headline tracking-widest opacity-60 italic">Secure Link Active</span>
+          <div className="lg:col-span-4 h-full flex flex-col space-y-4 font-sans text-left text-left text-left text-left text-left text-left shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm">
+            <div className="flex items-center justify-between px-2 text-left text-left text-left text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
+              <h3 className="font-mono text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest italic font-black font-headline tracking-tight text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Module_04: 시스템_통신</h3>
+              <span className="font-mono text-[9px] text-sentinel-green/60 uppercase italic font-headline tracking-widest opacity-60 italic italic italic italic italic italic italic italic shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-right shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Secure Link Active</span>
             </div>
             <Chat />
           </div>
         </div>
       ) : (
-        <div className="min-h-screen flex items-center justify-center p-6 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-sentinel-green/10 dark:from-sentinel-green/5 via-transparent to-transparent relative font-sans text-center overflow-x-hidden">
-          <div className="max-w-md w-full bg-white dark:bg-sentinel-dark-card border border-gray-100 dark:border-sentinel-green/10 rounded-[48px] shadow-2xl p-12 text-center relative overflow-hidden shadow-2xl">
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-sentinel-green shadow-[0_0_15px_rgba(0,255,148,0.5)]"></div>
-            <div className="w-24 h-24 bg-black dark:bg-sentinel-green rounded-[32px] mx-auto flex items-center justify-center mb-10 shadow-2xl rotate-6 transition-transform hover:rotate-12 duration-500 shadow-xl">
-              <span className="text-4xl dark:grayscale drop-shadow-xl shadow-2xl">🛡️</span>
+        <div className="min-h-screen flex items-center justify-center p-6 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-sentinel-green/10 dark:from-sentinel-green/5 via-transparent to-transparent relative font-sans text-center overflow-x-hidden text-center text-center text-center text-center text-center text-center text-center shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-sm shadow-sm shadow-sm shadow-sm">
+          <div className="max-w-md w-full bg-white dark:bg-sentinel-dark-card border border-gray-100 dark:border-sentinel-green/10 rounded-[48px] shadow-2xl p-12 text-center relative overflow-hidden shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm shadow-sm">
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-sentinel-green shadow-[0_0_15px_rgba(0,255,148,0.5)] shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm"></div>
+            <div className="w-24 h-24 bg-black dark:bg-sentinel-green rounded-[32px] mx-auto flex items-center justify-center mb-10 shadow-2xl rotate-6 transition-transform hover:rotate-12 duration-500 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
+              <span className="text-4xl dark:grayscale drop-shadow-xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">🛡️</span>
             </div>
-            <h2 className="text-4xl font-mono font-black mb-4 uppercase italic tracking-tighter text-black dark:text-white italic tracking-tight font-headline">DIGITAL SENTINEL</h2>
-            <p className="text-gray-500 dark:text-gray-400 font-sans text-[11px] uppercase tracking-[0.3em] mb-12 leading-relaxed italic font-black opacity-80 text-center">권한이 필요합니다<br/>보안 프로토콜 초기화 중</p>
+            <h2 className="text-4xl font-mono font-black mb-4 uppercase italic tracking-tighter text-black dark:text-white italic tracking-tight font-headline shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-center shadow-sm">DIGITAL SENTINEL</h2>
+            <p className="text-gray-500 dark:text-gray-400 font-sans text-[11px] uppercase tracking-[0.3em] mb-12 leading-relaxed italic font-black opacity-80 text-center text-center text-center text-center text-center text-center text-center text-center text-center font-bold font-bold font-bold font-bold font-bold shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">권한이 필요합니다<br/>보안 프로토콜 초기화 중</p>
             <button
-              className="w-full py-5 bg-black dark:bg-sentinel-green dark:text-black hover:bg-sentinel-green dark:hover:bg-sentinel-green/80 text-white hover:text-black font-mono font-black text-sm rounded-[24px] transition-all duration-500 uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.1)] hover:shadow-sentinel-green/30 active:scale-95 font-headline"
+              className="w-full py-5 bg-black dark:bg-sentinel-green dark:text-black hover:bg-sentinel-green dark:hover:bg-sentinel-green/80 text-white hover:text-black font-mono font-black text-sm rounded-[24px] transition-all duration-500 uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.1)] hover:shadow-sentinel-green/30 active:scale-95 font-headline shadow-lg shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm text-center shadow-xl shadow-xl shadow-xl"
               onClick={loginWithGoogle}
             >
               Google로 접속
             </button>
-            <p className="mt-10 font-mono text-[9px] text-gray-300 dark:text-gray-600 uppercase tracking-[0.5em] font-black opacity-40 italic font-sans text-center">SENTINEL_SYSTEM_V2.4</p>
+            <p className="mt-10 font-mono text-[9px] text-gray-300 dark:text-gray-600 uppercase tracking-[0.5em] font-black opacity-40 italic font-sans text-center text-center text-center text-center text-center text-center text-center text-center text-center font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">SENTINEL_SYSTEM_V2.4</p>
           </div>
         </div>
       )}
@@ -817,6 +927,7 @@ function App() {
       <ShortcutGuide isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
       <DonationModal isOpen={isDonationOpen} onClose={() => setIsDonationOpen(false)} />
       <SponsorshipModal isOpen={isSponsorshipOpen} onClose={() => setIsSponsorshipOpen(false)} />
+      <UpdateNoteModal isOpen={isUpdateNoteOpen} onClose={() => setIsUpdateNoteOpen(false)} />
       <BonusToast pulse={bonusPulse} />
     </div>
   );
