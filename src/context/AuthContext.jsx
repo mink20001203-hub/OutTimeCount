@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { getIdTokenResult, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 
@@ -7,6 +7,7 @@ const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
 
+// 사용자 입력 길이는 이모지/복합 문자를 고려해 grapheme 단위로 계산한다.
 const getCharacterLength = (value) => {
   if (!value) return 0;
   if (typeof Intl !== 'undefined' && Intl.Segmenter) {
@@ -16,11 +17,17 @@ const getCharacterLength = (value) => {
   return Array.from(value).length;
 };
 
+const adminUidAllowlist = (import.meta.env.VITE_ADMIN_UIDS || '')
+  .split(',')
+  .map((uid) => uid.trim())
+  .filter(Boolean);
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showNicknameModal, setShowNicknameModal] = useState(false);
+  const [isAdminClaim, setIsAdminClaim] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -30,6 +37,7 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
         setProfile(null);
         setShowNicknameModal(false);
+        setIsAdminClaim(false);
         setLoading(false);
         return;
       }
@@ -37,6 +45,12 @@ export const AuthProvider = ({ children }) => {
       setUser(firebaseUser);
 
       try {
+        // 관리자 판정은 profile.role이 아니라 인증 토큰 claim으로 확인한다.
+        const tokenResult = await getIdTokenResult(firebaseUser, true);
+        const isClaimAdmin = tokenResult?.claims?.admin === true;
+        const isAllowlistAdmin = adminUidAllowlist.includes(firebaseUser.uid);
+        setIsAdminClaim(isClaimAdmin || isAllowlistAdmin);
+
         const userRef = doc(db, 'users', firebaseUser.uid);
         const userDoc = await getDoc(userRef);
 
@@ -52,7 +66,6 @@ export const AuthProvider = ({ children }) => {
             photoURL: firebaseUser.photoURL,
             survival_time: 0,
             status: 'ONLINE',
-            role: 'USER',
             last_nickname_change: null,
             created_at: serverTimestamp(),
           };
@@ -62,7 +75,7 @@ export const AuthProvider = ({ children }) => {
           setShowNicknameModal(true);
         }
       } catch (error) {
-        console.error('Firestore Access Error:', error);
+        console.error('Auth init error:', error);
       } finally {
         setLoading(false);
       }
@@ -72,46 +85,30 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) return undefined;
 
-    // 프로필 실시간 리스너 - 중복 리스너 방지
     const userRef = doc(db, 'users', user.uid);
-    let unsubscribeSnapshot = null;
-
-    const setupProfileListener = () => {
-      try {
-        unsubscribeSnapshot = onSnapshot(userRef, (docSnap) => {
-          if (!docSnap.exists()) return;
-
-          const nextProfile = docSnap.data();
-          setProfile(nextProfile);
-          setShowNicknameModal(!nextProfile.nickname);
-        }, (error) => {
-          console.error('Profile Snapshot Error:', error);
-          // Quota exceeded 에러 시 5초 후 재시도
-          if (error.code === 'resource-exhausted' || error.message?.includes('429')) {
-            setTimeout(() => setupProfileListener(), 5000);
-          }
-        });
-      } catch (err) {
-        console.error('Setup Profile Listener Error:', err);
+    const unsubscribeProfile = onSnapshot(
+      userRef,
+      (docSnap) => {
+        if (!docSnap.exists()) return;
+        const nextProfile = docSnap.data();
+        setProfile(nextProfile);
+        setShowNicknameModal(!nextProfile.nickname);
+      },
+      (error) => {
+        console.error('Profile snapshot error:', error);
       }
-    };
+    );
 
-    setupProfileListener();
-
-    return () => {
-      if (unsubscribeSnapshot) {
-        unsubscribeSnapshot();
-      }
-    };
-  }, [user?.uid]);
+    return () => unsubscribeProfile();
+  }, [user]);
 
   const loginWithGoogle = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
-      console.error('Login Error:', error);
+      console.error('Login error:', error);
     }
   };
 
@@ -127,6 +124,7 @@ export const AuthProvider = ({ children }) => {
       throw new Error('별명을 입력해주세요.');
     }
 
+    // 제어문자/줄바꿈은 금지하고, 이모지/특수문자는 허용한다.
     if (/[\r\n\t]/.test(normalizedNickname)) {
       throw new Error('줄바꿈 또는 제어문자는 사용할 수 없습니다.');
     }
@@ -152,6 +150,7 @@ export const AuthProvider = ({ children }) => {
       return normalizedNickname;
     }
 
+    // UX 지연을 줄이기 위해 낙관적 업데이트를 먼저 반영한다.
     const previousProfile = profile;
     const optimisticProfile = {
       ...(profile || {}),
@@ -159,9 +158,8 @@ export const AuthProvider = ({ children }) => {
       email: user.email,
       photoURL: profile?.photoURL || user.photoURL,
       nickname: normalizedNickname,
-      last_nickname_change: now,
+      last_nickname_change: now
     };
-
     setProfile(optimisticProfile);
     setShowNicknameModal(false);
 
@@ -174,11 +172,10 @@ export const AuthProvider = ({ children }) => {
           email: optimisticProfile.email,
           photoURL: optimisticProfile.photoURL,
           nickname: normalizedNickname,
-          last_nickname_change: serverTimestamp(),
+          last_nickname_change: serverTimestamp()
         },
         { merge: true }
       );
-
       return normalizedNickname;
     } catch (error) {
       setProfile(previousProfile || null);
@@ -188,21 +185,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        loading,
-        loginWithGoogle,
-        logout,
-        updateNickname,
-        showNicknameModal,
-        setShowNicknameModal,
-        isAdmin: profile?.role === 'ADMIN',
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      user,
+      profile,
+      loading,
+      loginWithGoogle,
+      logout,
+      updateNickname,
+      showNicknameModal,
+      setShowNicknameModal,
+      isAdmin: isAdminClaim
+    }),
+    [user, profile, loading, showNicknameModal, isAdminClaim]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

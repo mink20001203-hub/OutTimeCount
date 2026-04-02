@@ -5,18 +5,46 @@ import { useAuth } from './context/AuthContext';
 import { db } from './firebase';
 import { 
   collection, query, orderBy, limit, onSnapshot, 
-  addDoc, serverTimestamp, where
+  addDoc, serverTimestamp, where, getDocs
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminTerminal from './context/AdminTerminal';
 
-import { loadTossPayments } from '@tosspayments/payment-sdk';
+// 서버 검증 엔드포인트: 로컬/배포 환경에서 .env로 주입
+const PAYMENT_VERIFY_URL = import.meta.env.VITE_PAYMENT_VERIFY_URL || '';
 
 const DEMO_PATRONS = [
   { id: 'demo_patron_admin', nickname: 'Admin', amount: 500000, to: 'UNICEF', badge: 'FOUNDING' },
   { id: 'demo_patron_fan', nickname: 'AhnYujinFan', amount: 300000, to: 'WWF', badge: 'VIP' },
   { id: 'demo_patron_operator', nickname: 'NightShiftObserver', amount: 150000, to: 'DOCTORS', badge: 'CORE' },
 ];
+
+/**
+ * 결제/후원 기록은 클라이언트가 Firestore에 직접 쓰지 않고
+ * 서버 검증 함수에서만 기록하도록 강제한다.
+ */
+const requestDonationVerification = async ({ user, payload }) => {
+  if (!PAYMENT_VERIFY_URL) {
+    throw new Error('VITE_PAYMENT_VERIFY_URL 이 설정되지 않았습니다.');
+  }
+
+  const idToken = await user.getIdToken();
+  const response = await fetch(PAYMENT_VERIFY_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`서버 검증 실패: ${text}`);
+  }
+
+  return response.json();
+};
 
 // --- Components ---
 
@@ -376,22 +404,23 @@ const TossPaymentSimulator = ({ isOpen, onClose, onDonationSuccess }) => {
     setIsProcessing(true);
     setStep(2);
 
-    // 결제 시뮬레이션 (2초)
+    // 결제 시뮬레이션 (2초) 후 서버 검증 함수에 기록 요청
     setTimeout(async () => {
       try {
-        await addDoc(collection(db, 'donations'), {
-          uid: user.uid,
-          nickname: profile.nickname,
-          photoURL: profile.photoURL || user.photoURL,
-          amount: amount,
-          to: 'DIGITAL_SENTINEL',
-          timestamp: serverTimestamp()
+        await requestDonationVerification({
+          user,
+          payload: {
+            mode: 'SIMULATED',
+            amount,
+            to: 'DIGITAL_SENTINEL',
+            nickname: profile.nickname || 'User'
+          }
         });
         setStep(3);
         setIsProcessing(false);
       } catch (error) {
         console.error('Donation error:', error);
-        alert('후원 중 오류가 발생했습니다.');
+        alert(error.message || '후원 중 오류가 발생했습니다.');
         setStep(1);
         setIsProcessing(false);
       }
@@ -527,36 +556,49 @@ const HallOfFame = () => {
   const [isPatron, setIsPatron] = useState(false);
 
   useEffect(() => {
+    // 후원자 여부는 실시간 구독 대신 단건 조회로 판정해 읽기 비용을 줄인다.
     if (!user?.uid) {
       setIsPatron(false);
       return;
     }
 
-    const eligibilityQuery = query(
-      collection(db, 'donations'),
-      where('uid', '==', user.uid),
-      limit(1)
-    );
+    const checkPatronStatus = async () => {
+      try {
+        const eligibilityQuery = query(
+          collection(db, 'donations'),
+          where('uid', '==', user.uid),
+          limit(1)
+        );
+        const snapshot = await getDocs(eligibilityQuery);
+        setIsPatron(!snapshot.empty);
+      } catch (error) {
+        console.error('Patron eligibility load error:', error);
+        setIsPatron(false);
+      }
+    };
 
-    const unsubscribe = onSnapshot(eligibilityQuery, (snapshot) => {
-      setIsPatron(!snapshot.empty);
-    });
-
-    return () => unsubscribe();
+    checkPatronStatus();
   }, [user?.uid]);
 
   useEffect(() => {
+    // 후원자 목록도 실시간 스트림 대신 요청 시 조회로 제한한다.
     if (!isPatron) {
       setPatrons([]);
       return;
     }
 
-    const q = query(collection(db, 'donations'), orderBy('amount', 'desc'), limit(5));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setPatrons(data);
-    });
-    return () => unsubscribe();
+    const loadTopPatrons = async () => {
+      try {
+        const q = query(collection(db, 'donations'), orderBy('amount', 'desc'), limit(5));
+        const snapshot = await getDocs(q);
+        setPatrons(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
+      } catch (error) {
+        console.error('Top patrons load error:', error);
+        setPatrons([]);
+      }
+    };
+
+    loadTopPatrons();
   }, [isPatron]);
 
   if (!isPatron) {
@@ -635,13 +677,24 @@ const DonationModal = ({ isOpen, onClose }) => {
   const [totalDonation, setTotalDonation] = useState(0);
   useEffect(() => {
     if (!isOpen) return;
-    const q = query(collection(db, 'donations'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      let total = 0;
-      snapshot.forEach(doc => total += (doc.data().amount || 0));
-      setTotalDonation(total);
-    });
-    return () => unsubscribe();
+
+    // 모달 오픈 시 1회 조회로 총액 계산 (구독 수를 줄여 쿼터 소모 완화)
+    const loadTotalDonation = async () => {
+      try {
+        const q = query(collection(db, 'donations'));
+        const snapshot = await getDocs(q);
+        let total = 0;
+        snapshot.forEach((item) => {
+          total += (item.data().amount || 0);
+        });
+        setTotalDonation(total);
+      } catch (error) {
+        console.error('Donation total load error:', error);
+        setTotalDonation(0);
+      }
+    };
+
+    loadTotalDonation();
   }, [isOpen]);
   if (!isOpen) return null;
   return (
@@ -955,7 +1008,6 @@ const LeaderboardTable = ({ onRankUpdate, maxRank = 10 }) => {
   const [useMockData, setUseMockData] = useState(false);
   const [error, setError] = useState(null);
   const mockDataRef = useRef(null);
-  const unsubscribeRef = useRef(null);
   const retryCountRef = useRef(0);
   const maxRetriesRef = useRef(3);
 
@@ -965,82 +1017,59 @@ const LeaderboardTable = ({ onRankUpdate, maxRank = 10 }) => {
       return;
     }
 
-    // 기존 리스너 정리
-    if (unsubscribeRef.current) {
-      unsubscribeRef.current();
-    }
-
-    // 실시간 순위 업데이트 리스너
-    const setupLeaderboardListener = () => {
+    // 전체 users 실시간 구독은 쿼터 소모가 커서 제한 조회 + 주기 갱신으로 대체
+    const loadLeaderboard = async () => {
       try {
-        const q = query(collection(db, 'users'), orderBy('survival_time', 'desc'));
-        unsubscribeRef.current = onSnapshot(q, (snapshot) => {
-          const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          
-          // 데이터가 없으면 모의 데이터 사용
-          if (data.length === 0) {
-            if (!mockDataRef.current) {
-              mockDataRef.current = generateMockCompetitors();
-            }
-            setCompetitors(mockDataRef.current.slice(0, maxRank));
-            setUseMockData(true);
-          } else {
-            mockDataRef.current = null;
-            setCompetitors(data.slice(0, maxRank));
-            setUseMockData(false);
+        const q = query(collection(db, 'users'), orderBy('survival_time', 'desc'), limit(maxRank));
+        const snapshot = await getDocs(q);
+        const data = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+
+        // 데이터가 없으면 모의 데이터 사용
+        if (data.length === 0) {
+          if (!mockDataRef.current) {
+            mockDataRef.current = generateMockCompetitors();
           }
-          
-          // 사용자 순위 업데이트
-          if (user && onRankUpdate) {
-            const index = data.findIndex(u => u.id === user.uid);
-            onRankUpdate(index !== -1 ? index + 1 : 'PENDING...', data.length);
-          }
-          
-          setLoading(false);
-          setError(null);
-          retryCountRef.current = 0;
-        }, (error) => {
-          console.error("Leaderboard Snapshot Error:", error);
-          
-          // Quota exceeded 에러 처리 (429 or resource-exhausted)
-          if (error.code === 'resource-exhausted' || error.code === 'permission-denied' || error.message?.includes('429')) {
-            // 재시도 로직
-            if (retryCountRef.current < maxRetriesRef.current) {
-              retryCountRef.current++;
-              const delayMs = 2000 * Math.pow(2, retryCountRef.current - 1); // Exponential backoff
-              setError(`데이터 로드 오류 (재시도 ${retryCountRef.current}/${maxRetriesRef.current}...)`);
-              
-              setTimeout(() => setupLeaderboardListener(), delayMs);
-            } else {
-              // 재시도 초과 시 모의 데이터로 폴백
-              if (!mockDataRef.current) {
-                mockDataRef.current = generateMockCompetitors();
-              }
-              setCompetitors(mockDataRef.current.slice(0, maxRank));
-              setUseMockData(true);
-              setError('모의 데이터로 로딩 중입니다.');
-              setLoading(false);
-            }
-          } else {
-            setError('데이터를 불러올 수 없습니다.');
-            setLoading(false);
-          }
-        });
-      } catch (err) {
-        console.error("Setup Leaderboard Listener Error:", err);
-        setError('시스템 오류가 발생했습니다.');
+          setCompetitors(mockDataRef.current.slice(0, maxRank));
+          setUseMockData(true);
+        } else {
+          mockDataRef.current = null;
+          setCompetitors(data);
+          setUseMockData(false);
+        }
+
+        // 제한 조회 환경에서는 보이는 목록 안에서만 순위를 계산
+        if (user && onRankUpdate) {
+          const index = data.findIndex((item) => item.id === user.uid);
+          onRankUpdate(index !== -1 ? index + 1 : '-', data.length);
+        }
+
         setLoading(false);
+        setError(null);
+        retryCountRef.current = 0;
+      } catch (err) {
+        console.error('Leaderboard load error:', err);
+        if (retryCountRef.current < maxRetriesRef.current) {
+          retryCountRef.current += 1;
+          setError(`데이터 로드 오류 (재시도 ${retryCountRef.current}/${maxRetriesRef.current})`);
+        } else {
+          if (!mockDataRef.current) {
+            mockDataRef.current = generateMockCompetitors();
+          }
+          setCompetitors(mockDataRef.current.slice(0, maxRank));
+          setUseMockData(true);
+          setError('모의 데이터로 전환되었습니다.');
+          setLoading(false);
+        }
       }
     };
 
-    setupLeaderboardListener();
+    loadLeaderboard();
+    const intervalId = window.setInterval(loadLeaderboard, 30000);
 
     return () => {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-      }
+      window.clearInterval(intervalId);
     };
-  }, [user]); // user만 의존성으로 설정
+  }, [user, maxRank, onRankUpdate]);
 
   return (
     <div className="monitoring-panel bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg h-[340px] flex flex-col font-sans text-left">
@@ -1184,9 +1213,30 @@ const Chat = () => {
     e.preventDefault();
     if (!input.trim() || !user) return;
 
-    // Anti-Spam: 동일한 메시지 연속 전송 방지
+    // Anti-Spam 1: 동일 메시지 반복 차단
     const trimmedInput = input.trim();
     const now = Date.now();
+
+    // Anti-Spam 2: 너무 긴 메시지 차단
+    if (trimmedInput.length > 300) {
+      setChatError('메시지는 300자 이하로 입력해 주세요.');
+      setTimeout(() => setChatError(null), 3000);
+      return;
+    }
+
+    // Anti-Spam 3: 초단위 연속 전송 차단 (봇성 입력 완화)
+    if (now - lastMessageRef.current.timestamp < 1200) {
+      setSpamWarning('메시지는 1.2초 간격으로 전송할 수 있습니다.');
+      setTimeout(() => setSpamWarning(''), 3000);
+      return;
+    }
+
+    // Anti-Spam 4: 동일 문자 과다 반복 차단
+    if (/(.)\1{14,}/.test(trimmedInput)) {
+      setSpamWarning('동일 문자 반복이 너무 많습니다.');
+      setTimeout(() => setSpamWarning(''), 3000);
+      return;
+    }
     
     if (trimmedInput === lastMessageRef.current.text && now - lastMessageRef.current.timestamp < 10000) {
       setSpamWarning('중복된 내용은 보낼 수 없습니다. 10초 후에 다시 시도하세요.');
@@ -1255,6 +1305,7 @@ const Chat = () => {
           <form onSubmit={sendMessage} className="flex gap-2">
             <input 
               value={input} onChange={e => setInput(e.target.value)}
+              maxLength={300}
               className="flex-1 bg-black/10 dark:bg-black/40 border border-sentinel-green/20 px-4 py-3 rounded-xl text-[13px] focus:outline-none focus:ring-1 focus:ring-sentinel-green/50 transition-all font-sans text-black dark:text-white placeholder:text-gray-400 font-medium shadow-inner"
               placeholder="메시지를 입력하세요"
             />
@@ -1343,24 +1394,29 @@ function App() {
   const handleDonationPopupClose = () => {
     setDonationPopupStep(0);
   };
-  // 결제 결과 확인 및 기록
+  // 토스 리다이렉트 성공 파라미터는 서버 검증 함수로 전달하고,
+  // 클라이언트에서는 Firestore를 직접 쓰지 않는다.
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const status = urlParams.get('payment');
+    const paymentKey = urlParams.get('paymentKey');
+    const orderId = urlParams.get('orderId');
     const amount = urlParams.get('amount');
     const to = urlParams.get('to');
 
-    if (status === 'success' && amount && user && !paymentHandledRef.current) {
+    if (paymentKey && orderId && amount && user && !paymentHandledRef.current) {
       paymentHandledRef.current = true;
       const recordDonation = async () => {
         try {
-          await addDoc(collection(db, 'donations'), {
-            uid: user.uid,
-            nickname: profile?.nickname || 'Anonymous',
-            amount: parseInt(amount),
-            to: to || 'UNICEF',
-            timestamp: serverTimestamp()
+          await requestDonationVerification({
+            user,
+            payload: {
+              paymentKey,
+              orderId,
+              amount: Number(amount),
+              to: to || 'UNICEF'
+            }
           });
+
           // URL 파라미터 제거
           window.history.replaceState({}, document.title, window.location.pathname);
           handleDonationSuccessFlow();
@@ -1370,7 +1426,7 @@ function App() {
       };
       recordDonation();
     }
-  }, [user, profile]);
+  }, [user]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {

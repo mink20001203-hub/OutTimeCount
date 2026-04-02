@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 인증 체크 공통 함수
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // 관리자 권한은 profile.role 대신 custom claims 기준으로 처리
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    // 본인 문서 접근 체크
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      // 리더보드 표시를 위해 읽기는 인증 사용자에게 허용
+      allow read: if isSignedIn();
+
+      // 최초 생성은 본인만 가능하고 기본 필드만 허용
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.role == 'USER';
+
+      // 일반 사용자는 role/status 등 민감 필드 수정 불가
+      allow update: if (isOwner(uid)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.email == resource.data.email)
+        || isAdmin();
+    }
+
+    match /messages/{messageId} {
+      // 채팅은 로그인 사용자만 읽기/쓰기
+      allow read: if isSignedIn();
+
+      // 채팅 본문 길이 제한 및 작성자 위조 방지
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 300
+        && request.resource.data.nickname is string
+        && request.resource.data.nickname.size() > 0
+        && request.resource.data.timestamp == request.time;
+
+      // 채팅 수정/삭제는 관리자만 허용
+      allow update, delete: if isAdmin();
+    }
+
+    match /donations/{donationId} {
+      // 후원 목록은 로그인 사용자만 읽기
+      allow read: if isSignedIn();
+
+      // 후원 기록은 서버(관리자 클레임)에서만 생성/수정하도록 제한
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}
