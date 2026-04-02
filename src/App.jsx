@@ -4,8 +4,8 @@ import { useTimer } from './context/TimerContext';
 import { useAuth } from './context/AuthContext';
 import { db } from './firebase';
 import { 
-  collection, query, orderBy, limit, onSnapshot, 
-  addDoc, serverTimestamp, where, getDocs
+  collection, query, orderBy, limit, onSnapshot, collectionGroup,
+  addDoc, serverTimestamp, where, getDocs, updateDoc, doc
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminTerminal from './context/AdminTerminal';
@@ -1482,10 +1482,50 @@ const ProjectBoardPanel = ({ projects }) => {
   );
 };
 
-const ProjectChatPanel = ({ projects, messages }) => {
+const ProjectChatPanel = ({ projects, messages, onSendMessage }) => {
   const [activeProjectId, setActiveProjectId] = useState(projects[0]?.id || '');
   const [draft, setDraft] = useState('');
+  const [messageType, setMessageType] = useState('GENERAL');
+  const [isSending, setIsSending] = useState(false);
+
+  useEffect(() => {
+    if (!projects.length) {
+      setActiveProjectId('');
+      return;
+    }
+    const hasActiveProject = projects.some((project) => project.id === activeProjectId);
+    if (!activeProjectId || !hasActiveProject) {
+      setActiveProjectId(projects[0].id);
+    }
+  }, [projects, activeProjectId]);
+
   const filteredMessages = messages.filter((message) => message.projectId === activeProjectId);
+  const typeLabel = {
+    GENERAL: '일반',
+    QUESTION: '질문',
+    FEEDBACK: '피드백',
+    REFERENCE: '참고자료',
+    질문: '질문',
+    피드백: '피드백',
+    참고자료: '참고자료',
+    일반: '일반'
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const text = draft.trim();
+    if (!text || !activeProjectId || !onSendMessage) return;
+
+    try {
+      setIsSending(true);
+      // 스레드 메시지 저장은 부모(App)에서 Firestore 트랜잭션 흐름으로 처리한다.
+      await onSendMessage({ projectId: activeProjectId, text, messageType });
+      setDraft('');
+      setMessageType('GENERAL');
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   return (
     <section className="h-full min-h-0 rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-4 md:p-5 shadow-[0_0_24px_rgba(0,255,148,0.08)] flex flex-col">
@@ -1516,22 +1556,35 @@ const ProjectChatPanel = ({ projects, messages }) => {
               <span className="text-sm font-bold text-sentinel-green">{message.author}</span>
               <span className="text-[11px] text-gray-500">{message.time}</span>
             </div>
-            <p className="text-[11px] text-sentinel-green/80 mb-1">{message.type}</p>
+            <p className="text-[11px] text-sentinel-green/80 mb-1">{typeLabel[message.type] || message.type}</p>
             <p className="text-sm text-gray-700 dark:text-gray-300 break-words">{message.text}</p>
           </div>
         ))}
       </div>
       <div className="mt-3 pt-3 border-t border-sentinel-green/15">
-        {/* 실제 전송은 2차에서 Firestore thread_messages 연결로 교체한다. */}
-        <form onSubmit={(event) => event.preventDefault()} className="flex gap-2">
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <select
+            value={messageType}
+            onChange={(event) => setMessageType(event.target.value)}
+            className="w-28 rounded-xl border border-sentinel-green/30 bg-black/20 px-2 py-2 text-xs text-black dark:text-white"
+          >
+            <option value="GENERAL">일반</option>
+            <option value="QUESTION">질문</option>
+            <option value="FEEDBACK">피드백</option>
+            <option value="REFERENCE">참고자료</option>
+          </select>
           <input
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="질문, 피드백, 참고자료 링크를 입력하세요."
             className="flex-1 rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm text-black dark:text-white"
           />
-          <button type="submit" className="px-3 py-2 rounded-xl border border-sentinel-green/50 text-sentinel-green text-sm font-bold">
-            등록
+          <button
+            type="submit"
+            disabled={isSending}
+            className="px-3 py-2 rounded-xl border border-sentinel-green/50 text-sentinel-green text-sm font-bold disabled:opacity-50"
+          >
+            {isSending ? '전송 중' : '등록'}
           </button>
         </form>
       </div>
@@ -1604,6 +1657,12 @@ function App() {
   const [module04Height, setModule04Height] = useState(null);
   const leftModulesRef = useRef(null);
   const paymentHandledRef = useRef(false);
+  const [projects, setProjects] = useState([]);
+  const [projectLogs, setProjectLogs] = useState([]);
+  const [projectThreads, setProjectThreads] = useState([]);
+  const [threadMessages, setThreadMessages] = useState([]);
+  const [focusSessions, setFocusSessions] = useState([]);
+  const [loungeDataReady, setLoungeDataReady] = useState(false);
 
   const [showInitializing, setShowInitializing] = useState(false);
   const [hasPlayedWelcomeSequence, setHasPlayedWelcomeSequence] = useState(() => sessionStorage.getItem('sentinel_boot_sequence') === 'done');
@@ -1743,10 +1802,165 @@ function App() {
     };
   }, [user, showNicknameModal]);
 
-  // 샘플 단계에서는 정적 데이터로 화면 구조를 먼저 검증한다.
-  const sampleProjectCount = SAMPLE_PROJECTS.length;
-  const sampleTodayLogCount = SAMPLE_PROJECTS.length * 2;
+  useEffect(() => {
+    if (!user) {
+      setProjects([]);
+      setProjectLogs([]);
+      setProjectThreads([]);
+      setThreadMessages([]);
+      setFocusSessions([]);
+      setLoungeDataReady(false);
+      return;
+    }
+
+    // 날짜 키는 focus_sessions 집계 필터에 사용한다.
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    const unsubscribers = [];
+
+    const projectsQuery = query(collection(db, 'projects'), orderBy('updatedAt', 'desc'), limit(20));
+    unsubscribers.push(onSnapshot(projectsQuery, (snapshot) => {
+      const next = snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+      setProjects(next);
+      setLoungeDataReady(true);
+    }, () => setLoungeDataReady(true)));
+
+    const logsQuery = query(
+      collection(db, 'project_logs'),
+      where('createdAt', '>=', startOfDay),
+      orderBy('createdAt', 'desc'),
+      limit(100)
+    );
+    unsubscribers.push(onSnapshot(logsQuery, (snapshot) => {
+      const next = snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+      setProjectLogs(next);
+    }));
+
+    const threadsQuery = query(collection(db, 'project_threads'), orderBy('lastMessageAt', 'desc'), limit(50));
+    unsubscribers.push(onSnapshot(threadsQuery, (snapshot) => {
+      const next = snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+      setProjectThreads(next);
+    }));
+
+    const messagesQuery = query(collectionGroup(db, 'messages'), orderBy('createdAt', 'desc'), limit(200));
+    unsubscribers.push(onSnapshot(messagesQuery, (snapshot) => {
+      const next = snapshot.docs.map((entry) => {
+        const threadId = entry.ref.parent.parent?.id || '';
+        return { id: entry.id, threadId, ...entry.data() };
+      });
+      setThreadMessages(next);
+    }));
+
+    const focusQuery = query(
+      collection(db, 'focus_sessions'),
+      where('dateKey', '==', todayKey),
+      limit(500)
+    );
+    unsubscribers.push(onSnapshot(focusQuery, (snapshot) => {
+      const next = snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+      setFocusSessions(next);
+    }));
+
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [user]);
+
+  const projectList = projects.length ? projects : SAMPLE_PROJECTS;
+  const threadToProjectMap = new Map(projectThreads.map((thread) => [thread.id, thread.projectId]));
+  const mappedMessages = threadMessages
+    .map((message) => ({
+      ...message,
+      projectId: message.projectId || threadToProjectMap.get(message.threadId) || '',
+      author: message.authorNickname || message.author || '게스트',
+      type: message.messageType || message.type || 'GENERAL',
+      text: message.text || '',
+      time: message.createdAt?.toMillis
+        ? new Date(message.createdAt.toMillis()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : (message.time || '--:--')
+    }))
+    .filter((message) => Boolean(message.projectId))
+    .reverse();
+  const chatMessages = mappedMessages.length ? mappedMessages : SAMPLE_THREAD_MESSAGES;
+
+  const latestLogsByProject = new Map();
+  projectLogs.forEach((entry) => {
+    if (!entry.projectId || latestLogsByProject.has(entry.projectId)) return;
+    latestLogsByProject.set(entry.projectId, entry);
+  });
+
+  const projectCards = projectList.map((project) => {
+    const latestLog = latestLogsByProject.get(project.id);
+    return {
+      ...project,
+      todayLog: latestLog?.summary || project.todayLog || '오늘 작업 로그를 작성해 주세요.',
+      retro: latestLog?.retro || project.retro || '회고 메모를 남겨 성장 과정을 기록해 보세요.'
+    };
+  });
+
+  const focusAggregation = new Map();
+  focusSessions.forEach((session) => {
+    const key = session.userUid || session.nickname || session.id;
+    if (!focusAggregation.has(key)) {
+      focusAggregation.set(key, {
+        id: key,
+        nickname: session.nickname || `사용자_${String(key).slice(0, 4)}`,
+        totalSeconds: 0,
+        streakDays: session.streakDays || 1
+      });
+    }
+    const row = focusAggregation.get(key);
+    row.totalSeconds += Number(session.durationSec || 0);
+    row.streakDays = Math.max(row.streakDays, Number(session.streakDays || 1));
+  });
+
+  const rankingFromFirestore = Array.from(focusAggregation.values())
+    .sort((a, b) => b.totalSeconds - a.totalSeconds)
+    .slice(0, 10)
+    .map((row) => ({
+      id: row.id,
+      nickname: row.nickname,
+      todayFocus: formatTime(row.totalSeconds),
+      streakDays: row.streakDays
+    }));
+  const focusRanking = rankingFromFirestore.length ? rankingFromFirestore : SAMPLE_FOCUS_RANKING;
+
+  const projectCount = projectCards.length;
+  const todayLogCount = projectLogs.length || SAMPLE_PROJECTS.length * 2;
   const focusTimeText = formatTime(survivalTime);
+
+  const handleSendProjectMessage = async ({ projectId, text, messageType }) => {
+    if (!user || !projectId) return;
+    const normalizedText = text.trim();
+    if (!normalizedText) return;
+
+    // 프로젝트별 기본 스레드를 생성/재사용해서 메시지를 기록한다.
+    let thread = projectThreads.find((entry) => entry.projectId === projectId);
+    if (!thread) {
+      const created = await addDoc(collection(db, 'project_threads'), {
+        projectId,
+        title: '기본 스레드',
+        createdBy: user.uid,
+        lastMessageAt: serverTimestamp()
+      });
+      thread = { id: created.id, projectId };
+    }
+
+    await addDoc(collection(db, 'project_threads', thread.id, 'messages'), {
+      projectId,
+      authorUid: user.uid,
+      authorNickname: profile?.nickname || '게스트',
+      messageType,
+      text: normalizedText,
+      createdAt: serverTimestamp()
+    });
+
+    await updateDoc(doc(db, 'project_threads', thread.id), {
+      lastMessageAt: serverTimestamp()
+    });
+  };
 
   return (
     <div className="min-h-screen bg-white dark:bg-sentinel-dark-bg text-black dark:text-white selection:bg-sentinel-green selection:text-black antialiased transition-colors duration-500 font-sans text-left overflow-x-hidden shadow-sm">
@@ -1837,25 +2051,32 @@ function App() {
             <p className="mt-1 text-sm text-sentinel-green/80">
               몰입 시간 랭킹으로 서로의 작업 리듬을 자극합니다.
             </p>
+            <p className="mt-2 text-xs text-gray-500">
+              데이터 소스: {loungeDataReady && projects.length > 0 ? '실시간 Firestore' : '샘플 스캐폴딩'}
+            </p>
           </section>
 
           <SummaryCards
-            projectCount={sampleProjectCount}
-            todayLogCount={sampleTodayLogCount}
+            projectCount={projectCount}
+            todayLogCount={todayLogCount}
             focusTimeText={focusTimeText}
           />
 
           <div className="grid grid-cols-1 lg:grid-cols-12 items-stretch gap-4">
             <div ref={leftModulesRef} className="lg:col-span-8 space-y-4">
-              <ProjectBoardPanel projects={SAMPLE_PROJECTS} />
+              <ProjectBoardPanel projects={projectCards} />
               <FocusAidPanel />
-              <FocusRankingPanel ranking={SAMPLE_FOCUS_RANKING} />
+              <FocusRankingPanel ranking={focusRanking} />
             </div>
             <div
               className="lg:col-span-4 min-h-0"
               style={module04Height ? { height: `${module04Height}px`, maxHeight: `${module04Height}px` } : undefined}
             >
-              <ProjectChatPanel projects={SAMPLE_PROJECTS} messages={SAMPLE_THREAD_MESSAGES} />
+              <ProjectChatPanel
+                projects={projectCards}
+                messages={chatMessages}
+                onSendMessage={handleSendProjectMessage}
+              />
             </div>
           </div>
         </motion.div>

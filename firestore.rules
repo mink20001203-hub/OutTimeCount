@@ -101,10 +101,15 @@ service cloud.firestore {
 
       allow create: if isSignedIn()
         && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.projectId is string
+        && request.resource.data.authorNickname is string
+        && request.resource.data.authorNickname.size() > 0
+        && request.resource.data.authorNickname.size() <= 24
         && request.resource.data.messageType in ['GENERAL', 'QUESTION', 'FEEDBACK', 'REFERENCE']
         && request.resource.data.text is string
         && request.resource.data.text.size() > 0
-        && request.resource.data.text.size() <= 500;
+        && request.resource.data.text.size() <= 500
+        && request.resource.data.createdAt == request.time;
 
       allow update, delete: if isAdmin()
         || (isSignedIn() && resource.data.authorUid == request.auth.uid);

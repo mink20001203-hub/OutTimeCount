@@ -52,7 +52,7 @@
 - `messageType: "GENERAL" | "QUESTION" | "FEEDBACK" | "REFERENCE"`
 - `text: string (1~500자)`
 - `linkUrl: string`
-- `createdAt: timestamp`
+- `createdAt: timestamp` (클라이언트에서는 `serverTimestamp()`로 저장)
 
 ## 5) focus_sessions
 - 목적: 몰입 시간 집계의 원천 데이터
