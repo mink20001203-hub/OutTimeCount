@@ -1471,6 +1471,17 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
   const [isBusy, setIsBusy] = useState(false);
   const [editingLogId, setEditingLogId] = useState('');
   const [editingLogForm, setEditingLogForm] = useState({ summary: '', retro: '', links: '' });
+  const [logPeriodFilter, setLogPeriodFilter] = useState('TODAY');
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const sevenDaysAgo = now.getTime() - (7 * 24 * 60 * 60 * 1000);
+  const visibleLogs = logs.filter((log) => {
+    const createdAtMs = log.createdAt?.toMillis ? log.createdAt.toMillis() : 0;
+    if (logPeriodFilter === 'ALL') return true;
+    if (logPeriodFilter === 'LAST_7_DAYS') return createdAtMs >= sevenDaysAgo;
+    return createdAtMs >= startOfToday;
+  });
 
   useEffect(() => {
     if (!projects.length) return;
@@ -1622,10 +1633,21 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
       <div className="mt-4 rounded-2xl border border-sentinel-green/15 bg-black/20 p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-bold text-sentinel-green">오늘 로그 수정 / 삭제</p>
-          <span className="text-xs text-gray-400">{logs.length}개</span>
+          <div className="flex items-center gap-2">
+            <select
+              value={logPeriodFilter}
+              onChange={(event) => setLogPeriodFilter(event.target.value)}
+              className="rounded-lg border border-sentinel-green/30 bg-black/20 px-2 py-1 text-xs text-sentinel-green"
+            >
+              <option value="TODAY">오늘</option>
+              <option value="LAST_7_DAYS">7일</option>
+              <option value="ALL">전체</option>
+            </select>
+            <span className="text-xs text-gray-400">{visibleLogs.length}개</span>
+          </div>
         </div>
         <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-          {logs.map((log) => (
+          {visibleLogs.map((log) => (
             <div key={log.id} className="rounded-xl border border-sentinel-green/10 bg-black/25 p-3">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-bold text-white truncate">{log.projectTitle || '프로젝트'}: {log.summary || '요약 없음'}</p>
@@ -1637,7 +1659,7 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
               <p className="text-xs text-gray-400 mt-1">{log.retro || '회고 없음'}</p>
             </div>
           ))}
-          {!logs.length && <p className="text-xs text-gray-500">오늘 작성된 로그가 없습니다.</p>}
+          {!visibleLogs.length && <p className="text-xs text-gray-500">선택한 기간에 해당하는 로그가 없습니다.</p>}
         </div>
         {editingLogId && (
           <form onSubmit={handleUpdateLog} className="mt-3 rounded-xl border border-sentinel-green/20 bg-black/25 p-3 space-y-2">
@@ -1659,10 +1681,15 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
 
 const ProjectBoardPanel = ({ projects }) => {
   const [statusFilter, setStatusFilter] = useState('전체');
+  const [tagFilter, setTagFilter] = useState('전체');
   const statusOptions = ['전체', ...Array.from(new Set(projects.map((project) => project.status || '미분류')))];
+  const tagOptions = ['전체', ...Array.from(new Set(projects.flatMap((project) => Array.isArray(project.tags) ? project.tags : [])))];
   const filteredProjects = statusFilter === '전체'
     ? projects
     : projects.filter((project) => (project.status || '미분류') === statusFilter);
+  const filteredByTagProjects = tagFilter === '전체'
+    ? filteredProjects
+    : filteredProjects.filter((project) => Array.isArray(project.tags) && project.tags.includes(tagFilter));
 
   return (
     <section className="rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-5 md:p-6 shadow-[0_0_24px_rgba(0,255,148,0.08)]">
@@ -1677,10 +1704,17 @@ const ProjectBoardPanel = ({ projects }) => {
           >
             {statusOptions.map((status) => <option key={`status_${status}`} value={status}>{status}</option>)}
           </select>
+          <select
+            value={tagFilter}
+            onChange={(event) => setTagFilter(event.target.value)}
+            className="rounded-lg border border-sentinel-green/30 bg-black/20 px-2 py-1 text-xs text-sentinel-green"
+          >
+            {tagOptions.map((tag) => <option key={`tag_${tag}`} value={tag}>{tag}</option>)}
+          </select>
         </div>
       </div>
       <div className="space-y-4">
-        {filteredProjects.map((project) => (
+        {filteredByTagProjects.map((project) => (
           <article key={project.id} className="rounded-2xl border border-sentinel-green/15 bg-black/15 dark:bg-black/25 p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -1706,7 +1740,7 @@ const ProjectBoardPanel = ({ projects }) => {
             </div>
           </article>
         ))}
-        {!filteredProjects.length && (
+        {!filteredByTagProjects.length && (
           <div className="rounded-2xl border border-sentinel-green/10 bg-black/20 p-4 text-sm text-gray-500">
             선택한 상태에 해당하는 프로젝트가 없습니다.
           </div>
@@ -1716,13 +1750,14 @@ const ProjectBoardPanel = ({ projects }) => {
   );
 };
 
-const ProjectChatPanel = ({ projects, messages, onSendMessage }) => {
+const ProjectChatPanel = ({ projects, messages, onSendMessage, searchState, onSearchStateChange }) => {
   const [activeProjectId, setActiveProjectId] = useState(projects[0]?.id || '');
   const [draft, setDraft] = useState('');
   const [messageType, setMessageType] = useState('GENERAL');
   const [isSending, setIsSending] = useState(false);
-  const [searchKeyword, setSearchKeyword] = useState('');
-  const [typeFilter, setTypeFilter] = useState('ALL');
+  const [searchKeyword, setSearchKeyword] = useState(searchState?.keyword || '');
+  const [typeFilter, setTypeFilter] = useState(searchState?.type || 'ALL');
+  const [recentLimit, setRecentLimit] = useState(String(searchState?.recentLimit || 150));
 
   useEffect(() => {
     if (!projects.length) {
@@ -1735,9 +1770,22 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage }) => {
     }
   }, [projects, activeProjectId]);
 
+  useEffect(() => {
+    const nextKeyword = (searchKeyword || '').trim();
+    const nextLimit = Number(recentLimit) || 150;
+    if (!onSearchStateChange) return;
+    // 검색 상태를 App으로 올려 서버 쿼리 조건으로 사용한다.
+    onSearchStateChange({
+      projectId: activeProjectId,
+      keyword: nextKeyword,
+      type: typeFilter,
+      recentLimit: Math.min(Math.max(nextLimit, 20), 300)
+    });
+  }, [activeProjectId, searchKeyword, typeFilter, recentLimit, onSearchStateChange]);
+
   const filteredMessages = messages.filter((message) => {
     if (message.projectId !== activeProjectId) return false;
-    if (typeFilter !== 'ALL' && message.type !== typeFilter) return false;
+    if (typeFilter !== 'ALL' && message.type !== typeFilter && message.messageType !== typeFilter) return false;
     if (!searchKeyword.trim()) return true;
     const keyword = searchKeyword.trim().toLowerCase();
     return `${message.author} ${message.text} ${message.type}`.toLowerCase().includes(keyword);
@@ -1801,7 +1849,7 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage }) => {
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-2 mb-3">
+      <div className="grid grid-cols-3 gap-2 mb-3">
         <select
           value={typeFilter}
           onChange={(event) => setTypeFilter(event.target.value)}
@@ -1819,6 +1867,16 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage }) => {
           placeholder="메시지 검색"
           className="rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-xs text-black dark:text-white"
         />
+        <select
+          value={recentLimit}
+          onChange={(event) => setRecentLimit(event.target.value)}
+          className="rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-xs text-black dark:text-white"
+        >
+          <option value="50">최근 50개</option>
+          <option value="100">최근 100개</option>
+          <option value="150">최근 150개</option>
+          <option value="300">최근 300개</option>
+        </select>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3">
         {filteredMessages.map((message) => (
@@ -1941,6 +1999,12 @@ function App() {
   const [threadMessages, setThreadMessages] = useState([]);
   const [focusSessions, setFocusSessions] = useState([]);
   const [loungeDataReady, setLoungeDataReady] = useState(false);
+  const [chatQueryState, setChatQueryState] = useState({
+    projectId: '',
+    keyword: '',
+    type: 'ALL',
+    recentLimit: 150
+  });
 
   const [showInitializing, setShowInitializing] = useState(false);
   const [hasPlayedWelcomeSequence, setHasPlayedWelcomeSequence] = useState(() => sessionStorage.getItem('sentinel_boot_sequence') === 'done');
@@ -2094,7 +2158,6 @@ function App() {
     // 날짜 키는 focus_sessions 집계 필터에 사용한다.
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
     const unsubscribers = [];
 
@@ -2107,9 +2170,8 @@ function App() {
 
     const logsQuery = query(
       collection(db, 'project_logs'),
-      where('createdAt', '>=', startOfDay),
       orderBy('createdAt', 'desc'),
-      limit(100)
+      limit(300)
     );
     unsubscribers.push(onSnapshot(logsQuery, (snapshot) => {
       const next = snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
@@ -2122,14 +2184,52 @@ function App() {
       setProjectThreads(next);
     }));
 
-    const messagesQuery = query(collectionGroup(db, 'messages'), orderBy('createdAt', 'desc'), limit(200));
-    unsubscribers.push(onSnapshot(messagesQuery, (snapshot) => {
+    // 최근 N개 + 타입 + 키워드 토큰(가능할 때) 기준으로 서버 쿼리를 최소화한다.
+    const messageConstraints = [];
+    if (chatQueryState.projectId) {
+      messageConstraints.push(where('projectId', '==', chatQueryState.projectId));
+    }
+    if (chatQueryState.type && chatQueryState.type !== 'ALL') {
+      messageConstraints.push(where('messageType', '==', chatQueryState.type));
+    }
+    const keywordToken = (chatQueryState.keyword || '').trim().toLowerCase();
+    if (keywordToken.length >= 2) {
+      messageConstraints.push(where('messageKeywords', 'array-contains', keywordToken));
+    }
+    messageConstraints.push(orderBy('createdAt', 'desc'));
+    messageConstraints.push(limit(chatQueryState.recentLimit || 150));
+
+    const primaryMessagesQuery = query(collectionGroup(db, 'messages'), ...messageConstraints);
+    const fallbackConstraints = [
+      ...(chatQueryState.projectId ? [where('projectId', '==', chatQueryState.projectId)] : []),
+      ...(chatQueryState.type && chatQueryState.type !== 'ALL' ? [where('messageType', '==', chatQueryState.type)] : []),
+      orderBy('createdAt', 'desc'),
+      limit(chatQueryState.recentLimit || 150)
+    ];
+    const fallbackMessagesQuery = query(collectionGroup(db, 'messages'), ...fallbackConstraints);
+
+    let fallbackUnsubscribe = null;
+    const primaryUnsubscribe = onSnapshot(primaryMessagesQuery, (snapshot) => {
       const next = snapshot.docs.map((entry) => {
         const threadId = entry.ref.parent.parent?.id || '';
         return { id: entry.id, threadId, ...entry.data() };
       });
       setThreadMessages(next);
-    }));
+    }, () => {
+      // 인덱스 미생성/제약 충돌 시 키워드 조건 없이 폴백한다.
+      if (fallbackUnsubscribe) return;
+      fallbackUnsubscribe = onSnapshot(fallbackMessagesQuery, (snapshot) => {
+        const next = snapshot.docs.map((entry) => {
+          const threadId = entry.ref.parent.parent?.id || '';
+          return { id: entry.id, threadId, ...entry.data() };
+        });
+        setThreadMessages(next);
+      });
+    });
+    unsubscribers.push(() => {
+      primaryUnsubscribe();
+      if (fallbackUnsubscribe) fallbackUnsubscribe();
+    });
 
     const focusQuery = query(
       collection(db, 'focus_sessions'),
@@ -2144,7 +2244,7 @@ function App() {
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [user]);
+  }, [user, chatQueryState.projectId, chatQueryState.type, chatQueryState.keyword, chatQueryState.recentLimit]);
 
   const projectList = projects.length ? projects : SAMPLE_PROJECTS;
   const threadToProjectMap = new Map(projectThreads.map((thread) => [thread.id, thread.projectId]));
@@ -2162,6 +2262,12 @@ function App() {
     .filter((message) => Boolean(message.projectId))
     .reverse();
   const chatMessages = mappedMessages.length ? mappedMessages : SAMPLE_THREAD_MESSAGES;
+
+  useEffect(() => {
+    if (!projectList.length) return;
+    if (chatQueryState.projectId) return;
+    setChatQueryState((prev) => ({ ...prev, projectId: projectList[0].id }));
+  }, [projectList, chatQueryState.projectId]);
 
   const latestLogsByProject = new Map();
   projectLogs.forEach((entry) => {
@@ -2205,8 +2311,14 @@ function App() {
     }));
   const focusRanking = rankingFromFirestore.length ? rankingFromFirestore : SAMPLE_FOCUS_RANKING;
 
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayLogCountFromFirestore = projectLogs.filter((entry) => {
+    if (!entry.createdAt?.toMillis) return false;
+    return entry.createdAt.toMillis() >= todayStart.getTime();
+  }).length;
   const projectCount = projectCards.length;
-  const todayLogCount = projectLogs.length || SAMPLE_PROJECTS.length * 2;
+  const todayLogCount = todayLogCountFromFirestore || SAMPLE_PROJECTS.length * 2;
   const focusTimeText = formatTime(survivalTime);
   const recentLogsForEditor = (projectLogs.length ? projectLogs : [])
     .slice(0, 20)
@@ -2238,6 +2350,15 @@ function App() {
       authorNickname: profile?.nickname || '게스트',
       messageType,
       text: normalizedText,
+      // 서버 키워드 검색을 위해 토큰 배열을 함께 저장한다.
+      messageKeywords: Array.from(new Set(
+        normalizedText
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+          .split(/\s+/)
+          .map((token) => token.trim())
+          .filter((token) => token.length >= 2)
+      )).slice(0, 20),
       createdAt: serverTimestamp()
     });
 
@@ -2467,6 +2588,8 @@ function App() {
                 projects={projectCards}
                 messages={chatMessages}
                 onSendMessage={handleSendProjectMessage}
+                searchState={chatQueryState}
+                onSearchStateChange={setChatQueryState}
               />
             </div>
           </div>
