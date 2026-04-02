@@ -5,7 +5,7 @@ import { useAuth } from './context/AuthContext';
 import { db } from './firebase';
 import { 
   collection, query, orderBy, limit, onSnapshot, collectionGroup,
-  addDoc, serverTimestamp, where, getDocs, updateDoc, doc
+  addDoc, serverTimestamp, where, getDocs, updateDoc, deleteDoc, doc
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminTerminal from './context/AdminTerminal';
@@ -1443,15 +1443,244 @@ const SummaryCards = ({ projectCount, todayLogCount, focusTimeText }) => {
   );
 };
 
+const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, onCreateLog, onUpdateLog, onDeleteLog }) => {
+  const [createForm, setCreateForm] = useState({
+    title: '',
+    description: '',
+    status: '진행 중',
+    tags: '',
+    demoUrl: '',
+    repoUrl: ''
+  });
+  const [editProjectId, setEditProjectId] = useState('');
+  const [editForm, setEditForm] = useState({
+    title: '',
+    description: '',
+    status: '진행 중',
+    tags: '',
+    demoUrl: '',
+    repoUrl: ''
+  });
+  const [logForm, setLogForm] = useState({
+    projectId: '',
+    summary: '',
+    retro: '',
+    links: ''
+  });
+  const [statusMessage, setStatusMessage] = useState('');
+  const [isBusy, setIsBusy] = useState(false);
+  const [editingLogId, setEditingLogId] = useState('');
+  const [editingLogForm, setEditingLogForm] = useState({ summary: '', retro: '', links: '' });
+
+  useEffect(() => {
+    if (!projects.length) return;
+    if (!editProjectId) {
+      setEditProjectId(projects[0].id);
+      setLogForm((prev) => ({ ...prev, projectId: projects[0].id }));
+      return;
+    }
+    const selected = projects.find((project) => project.id === editProjectId);
+    if (!selected) return;
+    // 수정 대상 프로젝트를 바꿀 때 폼을 현재 값으로 동기화한다.
+    setEditForm({
+      title: selected.title || '',
+      description: selected.description || '',
+      status: selected.status || '진행 중',
+      tags: Array.isArray(selected.tags) ? selected.tags.join(', ') : '',
+      demoUrl: selected.demoUrl || '',
+      repoUrl: selected.repoUrl || ''
+    });
+    setLogForm((prev) => ({ ...prev, projectId: selected.id }));
+  }, [projects, editProjectId]);
+
+  const handleCreateProject = async (event) => {
+    event.preventDefault();
+    if (!onCreateProject) return;
+    try {
+      setIsBusy(true);
+      await onCreateProject(createForm);
+      setCreateForm({ title: '', description: '', status: '진행 중', tags: '', demoUrl: '', repoUrl: '' });
+      setStatusMessage('프로젝트 카드가 생성되었습니다.');
+    } catch (error) {
+      setStatusMessage(error.message || '프로젝트 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleUpdateProject = async (event) => {
+    event.preventDefault();
+    if (!onUpdateProject || !editProjectId) return;
+    try {
+      setIsBusy(true);
+      await onUpdateProject(editProjectId, editForm);
+      setStatusMessage('프로젝트 카드가 수정되었습니다.');
+    } catch (error) {
+      setStatusMessage(error.message || '프로젝트 수정 중 오류가 발생했습니다.');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleCreateLog = async (event) => {
+    event.preventDefault();
+    if (!onCreateLog || !logForm.projectId) return;
+    try {
+      setIsBusy(true);
+      await onCreateLog(logForm);
+      setLogForm((prev) => ({ ...prev, summary: '', retro: '', links: '' }));
+      setStatusMessage('오늘 작업 로그가 저장되었습니다.');
+    } catch (error) {
+      setStatusMessage(error.message || '작업 로그 저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const startEditLog = (log) => {
+    setEditingLogId(log.id);
+    setEditingLogForm({
+      summary: log.summary || '',
+      retro: log.retro || '',
+      links: Array.isArray(log.links) ? log.links.join(', ') : ''
+    });
+  };
+
+  const cancelEditLog = () => {
+    setEditingLogId('');
+    setEditingLogForm({ summary: '', retro: '', links: '' });
+  };
+
+  const handleUpdateLog = async (event) => {
+    event.preventDefault();
+    if (!editingLogId || !onUpdateLog) return;
+    try {
+      setIsBusy(true);
+      await onUpdateLog(editingLogId, editingLogForm);
+      setStatusMessage('작업 로그가 수정되었습니다.');
+      cancelEditLog();
+    } catch (error) {
+      setStatusMessage(error.message || '작업 로그 수정 중 오류가 발생했습니다.');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleDeleteLog = async (logId) => {
+    if (!onDeleteLog || !logId) return;
+    try {
+      setIsBusy(true);
+      await onDeleteLog(logId);
+      setStatusMessage('작업 로그가 삭제되었습니다.');
+      if (editingLogId === logId) cancelEditLog();
+    } catch (error) {
+      setStatusMessage(error.message || '작업 로그 삭제 중 오류가 발생했습니다.');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  return (
+    <section className="rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-5 md:p-6 shadow-[0_0_24px_rgba(0,255,148,0.08)]">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="module-header-text text-sentinel-green">입력형 라운지 폼</h3>
+        <span className="text-xs text-sentinel-green/70 font-bold">생성 / 수정 / 로그</span>
+      </div>
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+        <form onSubmit={handleCreateProject} className="rounded-2xl border border-sentinel-green/15 bg-black/20 p-4 space-y-2">
+          <p className="text-sm font-bold text-sentinel-green">프로젝트 생성</p>
+          <input value={createForm.title} onChange={(event) => setCreateForm((prev) => ({ ...prev, title: event.target.value }))} placeholder="프로젝트 제목" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+          <input value={createForm.description} onChange={(event) => setCreateForm((prev) => ({ ...prev, description: event.target.value }))} placeholder="설명" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+          <input value={createForm.tags} onChange={(event) => setCreateForm((prev) => ({ ...prev, tags: event.target.value }))} placeholder="태그(쉼표 구분)" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+          <input value={createForm.demoUrl} onChange={(event) => setCreateForm((prev) => ({ ...prev, demoUrl: event.target.value }))} placeholder="Demo URL" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+          <input value={createForm.repoUrl} onChange={(event) => setCreateForm((prev) => ({ ...prev, repoUrl: event.target.value }))} placeholder="Repo URL" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+          <button type="submit" disabled={isBusy} className="w-full rounded-xl border border-sentinel-green/50 px-3 py-2 text-sm font-bold text-sentinel-green disabled:opacity-50">생성</button>
+        </form>
+
+        <form onSubmit={handleUpdateProject} className="rounded-2xl border border-sentinel-green/15 bg-black/20 p-4 space-y-2">
+          <p className="text-sm font-bold text-sentinel-green">프로젝트 수정</p>
+          <select value={editProjectId} onChange={(event) => setEditProjectId(event.target.value)} className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm">
+            {projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
+          </select>
+          <input value={editForm.title} onChange={(event) => setEditForm((prev) => ({ ...prev, title: event.target.value }))} placeholder="프로젝트 제목" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+          <input value={editForm.description} onChange={(event) => setEditForm((prev) => ({ ...prev, description: event.target.value }))} placeholder="설명" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+          <input value={editForm.tags} onChange={(event) => setEditForm((prev) => ({ ...prev, tags: event.target.value }))} placeholder="태그(쉼표 구분)" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+          <button type="submit" disabled={isBusy || !editProjectId} className="w-full rounded-xl border border-sentinel-green/50 px-3 py-2 text-sm font-bold text-sentinel-green disabled:opacity-50">수정</button>
+        </form>
+
+        <form onSubmit={handleCreateLog} className="rounded-2xl border border-sentinel-green/15 bg-black/20 p-4 space-y-2">
+          <p className="text-sm font-bold text-sentinel-green">오늘 작업 로그</p>
+          <select value={logForm.projectId} onChange={(event) => setLogForm((prev) => ({ ...prev, projectId: event.target.value }))} className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm">
+            {projects.map((project) => <option key={`${project.id}_log`} value={project.id}>{project.title}</option>)}
+          </select>
+          <input value={logForm.summary} onChange={(event) => setLogForm((prev) => ({ ...prev, summary: event.target.value }))} placeholder="오늘 작업 내용" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+          <input value={logForm.retro} onChange={(event) => setLogForm((prev) => ({ ...prev, retro: event.target.value }))} placeholder="회고 메모" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+          <input value={logForm.links} onChange={(event) => setLogForm((prev) => ({ ...prev, links: event.target.value }))} placeholder="관련 링크(쉼표 구분)" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+          <button type="submit" disabled={isBusy || !logForm.projectId} className="w-full rounded-xl border border-sentinel-green/50 px-3 py-2 text-sm font-bold text-sentinel-green disabled:opacity-50">저장</button>
+        </form>
+      </div>
+      <div className="mt-4 rounded-2xl border border-sentinel-green/15 bg-black/20 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-bold text-sentinel-green">오늘 로그 수정 / 삭제</p>
+          <span className="text-xs text-gray-400">{logs.length}개</span>
+        </div>
+        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+          {logs.map((log) => (
+            <div key={log.id} className="rounded-xl border border-sentinel-green/10 bg-black/25 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-bold text-white truncate">{log.projectTitle || '프로젝트'}: {log.summary || '요약 없음'}</p>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => startEditLog(log)} className="text-xs px-2 py-1 rounded-lg border border-sentinel-green/40 text-sentinel-green">수정</button>
+                  <button type="button" onClick={() => handleDeleteLog(log.id)} className="text-xs px-2 py-1 rounded-lg border border-red-400/40 text-red-400">삭제</button>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">{log.retro || '회고 없음'}</p>
+            </div>
+          ))}
+          {!logs.length && <p className="text-xs text-gray-500">오늘 작성된 로그가 없습니다.</p>}
+        </div>
+        {editingLogId && (
+          <form onSubmit={handleUpdateLog} className="mt-3 rounded-xl border border-sentinel-green/20 bg-black/25 p-3 space-y-2">
+            {/* 수정 폼을 별도로 두어 기존 작성 폼과 충돌하지 않게 한다. */}
+            <input value={editingLogForm.summary} onChange={(event) => setEditingLogForm((prev) => ({ ...prev, summary: event.target.value }))} placeholder="수정할 작업 내용" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+            <input value={editingLogForm.retro} onChange={(event) => setEditingLogForm((prev) => ({ ...prev, retro: event.target.value }))} placeholder="수정할 회고 메모" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+            <input value={editingLogForm.links} onChange={(event) => setEditingLogForm((prev) => ({ ...prev, links: event.target.value }))} placeholder="수정할 링크(쉼표 구분)" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+            <div className="flex gap-2">
+              <button type="submit" disabled={isBusy} className="flex-1 rounded-xl border border-sentinel-green/50 px-3 py-2 text-sm font-bold text-sentinel-green disabled:opacity-50">수정 저장</button>
+              <button type="button" onClick={cancelEditLog} className="flex-1 rounded-xl border border-gray-500/40 px-3 py-2 text-sm font-bold text-gray-300">취소</button>
+            </div>
+          </form>
+        )}
+      </div>
+      {statusMessage && <p className="mt-3 text-xs text-sentinel-green/80">{statusMessage}</p>}
+    </section>
+  );
+};
+
 const ProjectBoardPanel = ({ projects }) => {
+  const [statusFilter, setStatusFilter] = useState('전체');
+  const statusOptions = ['전체', ...Array.from(new Set(projects.map((project) => project.status || '미분류')))];
+  const filteredProjects = statusFilter === '전체'
+    ? projects
+    : projects.filter((project) => (project.status || '미분류') === statusFilter);
+
   return (
     <section className="rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-5 md:p-6 shadow-[0_0_24px_rgba(0,255,148,0.08)]">
       <div className="flex items-center justify-between mb-4">
         <h3 className="module-header-text text-sentinel-green">Module_03: 프로젝트_보드</h3>
-        <span className="text-xs text-sentinel-green/70 font-bold">작업물 아카이브</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-sentinel-green/70 font-bold">작업물 아카이브</span>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            className="rounded-lg border border-sentinel-green/30 bg-black/20 px-2 py-1 text-xs text-sentinel-green"
+          >
+            {statusOptions.map((status) => <option key={`status_${status}`} value={status}>{status}</option>)}
+          </select>
+        </div>
       </div>
       <div className="space-y-4">
-        {projects.map((project) => (
+        {filteredProjects.map((project) => (
           <article key={project.id} className="rounded-2xl border border-sentinel-green/15 bg-black/15 dark:bg-black/25 p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -1477,6 +1706,11 @@ const ProjectBoardPanel = ({ projects }) => {
             </div>
           </article>
         ))}
+        {!filteredProjects.length && (
+          <div className="rounded-2xl border border-sentinel-green/10 bg-black/20 p-4 text-sm text-gray-500">
+            선택한 상태에 해당하는 프로젝트가 없습니다.
+          </div>
+        )}
       </div>
     </section>
   );
@@ -1487,6 +1721,8 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage }) => {
   const [draft, setDraft] = useState('');
   const [messageType, setMessageType] = useState('GENERAL');
   const [isSending, setIsSending] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [typeFilter, setTypeFilter] = useState('ALL');
 
   useEffect(() => {
     if (!projects.length) {
@@ -1499,7 +1735,13 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage }) => {
     }
   }, [projects, activeProjectId]);
 
-  const filteredMessages = messages.filter((message) => message.projectId === activeProjectId);
+  const filteredMessages = messages.filter((message) => {
+    if (message.projectId !== activeProjectId) return false;
+    if (typeFilter !== 'ALL' && message.type !== typeFilter) return false;
+    if (!searchKeyword.trim()) return true;
+    const keyword = searchKeyword.trim().toLowerCase();
+    return `${message.author} ${message.text} ${message.type}`.toLowerCase().includes(keyword);
+  });
   const typeLabel = {
     GENERAL: '일반',
     QUESTION: '질문',
@@ -1509,6 +1751,16 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage }) => {
     피드백: '피드백',
     참고자료: '참고자료',
     일반: '일반'
+  };
+  const typeClass = {
+    GENERAL: 'bg-gray-500/10 text-gray-300 border-gray-400/30',
+    QUESTION: 'bg-orange-500/10 text-orange-300 border-orange-400/30',
+    FEEDBACK: 'bg-blue-500/10 text-blue-300 border-blue-400/30',
+    REFERENCE: 'bg-purple-500/10 text-purple-300 border-purple-400/30',
+    일반: 'bg-gray-500/10 text-gray-300 border-gray-400/30',
+    질문: 'bg-orange-500/10 text-orange-300 border-orange-400/30',
+    피드백: 'bg-blue-500/10 text-blue-300 border-blue-400/30',
+    참고자료: 'bg-purple-500/10 text-purple-300 border-purple-400/30'
   };
 
   const handleSubmit = async (event) => {
@@ -1549,6 +1801,25 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage }) => {
           </button>
         ))}
       </div>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <select
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value)}
+          className="rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-xs text-black dark:text-white"
+        >
+          <option value="ALL">전체 타입</option>
+          <option value="GENERAL">일반</option>
+          <option value="QUESTION">질문</option>
+          <option value="FEEDBACK">피드백</option>
+          <option value="REFERENCE">참고자료</option>
+        </select>
+        <input
+          value={searchKeyword}
+          onChange={(event) => setSearchKeyword(event.target.value)}
+          placeholder="메시지 검색"
+          className="rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-xs text-black dark:text-white"
+        />
+      </div>
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3">
         {filteredMessages.map((message) => (
           <div key={message.id} className="rounded-xl border border-sentinel-green/10 bg-black/25 p-3">
@@ -1556,10 +1827,17 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage }) => {
               <span className="text-sm font-bold text-sentinel-green">{message.author}</span>
               <span className="text-[11px] text-gray-500">{message.time}</span>
             </div>
-            <p className="text-[11px] text-sentinel-green/80 mb-1">{typeLabel[message.type] || message.type}</p>
+            <p className={`inline-flex px-2 py-0.5 rounded-md border text-[11px] mb-1 ${typeClass[message.type] || typeClass.GENERAL}`}>
+              {typeLabel[message.type] || message.type}
+            </p>
             <p className="text-sm text-gray-700 dark:text-gray-300 break-words">{message.text}</p>
           </div>
         ))}
+        {!filteredMessages.length && (
+          <div className="rounded-xl border border-sentinel-green/10 bg-black/20 p-3 text-sm text-gray-500">
+            조건에 맞는 메시지가 없습니다.
+          </div>
+        )}
       </div>
       <div className="mt-3 pt-3 border-t border-sentinel-green/15">
         <form onSubmit={handleSubmit} className="flex gap-2">
@@ -1930,6 +2208,12 @@ function App() {
   const projectCount = projectCards.length;
   const todayLogCount = projectLogs.length || SAMPLE_PROJECTS.length * 2;
   const focusTimeText = formatTime(survivalTime);
+  const recentLogsForEditor = (projectLogs.length ? projectLogs : [])
+    .slice(0, 20)
+    .map((log) => ({
+      ...log,
+      projectTitle: projectList.find((project) => project.id === log.projectId)?.title || '프로젝트'
+    }));
 
   const handleSendProjectMessage = async ({ projectId, text, messageType }) => {
     if (!user || !projectId) return;
@@ -1960,6 +2244,100 @@ function App() {
     await updateDoc(doc(db, 'project_threads', thread.id), {
       lastMessageAt: serverTimestamp()
     });
+  };
+
+  const handleCreateProject = async (payload) => {
+    if (!user) throw new Error('로그인이 필요합니다.');
+    const title = (payload.title || '').trim();
+    if (!title) throw new Error('프로젝트 제목을 입력해 주세요.');
+
+    const tags = (payload.tags || '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    await addDoc(collection(db, 'projects'), {
+      title,
+      description: (payload.description || '').trim(),
+      status: payload.status || '진행 중',
+      tags,
+      demoUrl: (payload.demoUrl || '').trim(),
+      repoUrl: (payload.repoUrl || '').trim(),
+      ownerUid: user.uid,
+      members: [user.uid],
+      updatedAt: serverTimestamp()
+    });
+  };
+
+  const handleUpdateProject = async (projectId, payload) => {
+    if (!user || !projectId) throw new Error('수정할 프로젝트를 선택해 주세요.');
+    const title = (payload.title || '').trim();
+    if (!title) throw new Error('프로젝트 제목을 입력해 주세요.');
+
+    const tags = (payload.tags || '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    await updateDoc(doc(db, 'projects', projectId), {
+      title,
+      description: (payload.description || '').trim(),
+      status: payload.status || '진행 중',
+      tags,
+      demoUrl: (payload.demoUrl || '').trim(),
+      repoUrl: (payload.repoUrl || '').trim(),
+      updatedAt: serverTimestamp()
+    });
+  };
+
+  const handleCreateProjectLog = async (payload) => {
+    if (!user) throw new Error('로그인이 필요합니다.');
+    const projectId = payload.projectId;
+    const summary = (payload.summary || '').trim();
+    if (!projectId) throw new Error('로그 대상 프로젝트를 선택해 주세요.');
+    if (!summary) throw new Error('오늘 작업 내용을 입력해 주세요.');
+
+    const links = (payload.links || '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    await addDoc(collection(db, 'project_logs'), {
+      projectId,
+      authorUid: user.uid,
+      authorNickname: profile?.nickname || '게스트',
+      summary,
+      retro: (payload.retro || '').trim(),
+      links,
+      logType: 'DAILY',
+      createdAt: serverTimestamp()
+    });
+
+    await updateDoc(doc(db, 'projects', projectId), {
+      updatedAt: serverTimestamp()
+    });
+  };
+
+  const handleUpdateProjectLog = async (logId, payload) => {
+    if (!user || !logId) throw new Error('수정할 로그를 선택해 주세요.');
+    const summary = (payload.summary || '').trim();
+    if (!summary) throw new Error('수정할 작업 내용을 입력해 주세요.');
+
+    const links = (payload.links || '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    await updateDoc(doc(db, 'project_logs', logId), {
+      summary,
+      retro: (payload.retro || '').trim(),
+      links
+    });
+  };
+
+  const handleDeleteProjectLog = async (logId) => {
+    if (!user || !logId) throw new Error('삭제할 로그를 선택해 주세요.');
+    await deleteDoc(doc(db, 'project_logs', logId));
   };
 
   return (
@@ -2064,13 +2442,26 @@ function App() {
 
           <div className="grid grid-cols-1 lg:grid-cols-12 items-stretch gap-4">
             <div ref={leftModulesRef} className="lg:col-span-8 space-y-4">
+              <ProjectInputPanel
+                projects={projectCards}
+                logs={recentLogsForEditor}
+                onCreateProject={handleCreateProject}
+                onUpdateProject={handleUpdateProject}
+                onCreateLog={handleCreateProjectLog}
+                onUpdateLog={handleUpdateProjectLog}
+                onDeleteLog={handleDeleteProjectLog}
+              />
               <ProjectBoardPanel projects={projectCards} />
               <FocusAidPanel />
               <FocusRankingPanel ranking={focusRanking} />
             </div>
             <div
               className="lg:col-span-4 min-h-0"
-              style={module04Height ? { height: `${module04Height}px`, maxHeight: `${module04Height}px` } : undefined}
+              style={
+                module04Height
+                  ? { height: `${module04Height}px`, maxHeight: 'calc(100vh - 120px)' }
+                  : { maxHeight: 'calc(100vh - 120px)' }
+              }
             >
               <ProjectChatPanel
                 projects={projectCards}
