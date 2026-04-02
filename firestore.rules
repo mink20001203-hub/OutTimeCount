@@ -1,12 +1,12 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 인증 체크 공통 함수
+    // 공통 인증 체크
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // 관리자 권한은 profile.role 대신 custom claims 기준으로 처리
+    // 관리자 권한은 custom claims(admin=true)로만 판별
     function isAdmin() {
       return isSignedIn() && request.auth.token.admin == true;
     }
@@ -16,47 +16,134 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
-    match /users/{uid} {
-      // 리더보드 표시를 위해 읽기는 인증 사용자에게 허용
-      allow read: if isSignedIn();
-
-      // 최초 생성은 본인만 가능하고 기본 필드만 허용
-      allow create: if isOwner(uid)
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.role == 'USER';
-
-      // 일반 사용자는 role/status 등 민감 필드 수정 불가
-      allow update: if (isOwner(uid)
-        && request.resource.data.uid == resource.data.uid
-        && request.resource.data.role == resource.data.role
-        && request.resource.data.email == resource.data.email)
-        || isAdmin();
+    // 닉네임 규칙(2~12자) 확인
+    function isValidNickname(nickname) {
+      return nickname is string
+        && nickname.size() >= 2
+        && nickname.size() <= 12;
     }
 
-    match /messages/{messageId} {
-      // 채팅은 로그인 사용자만 읽기/쓰기
+    // ----------------------------
+    // users
+    // ----------------------------
+    match /users/{uid} {
       allow read: if isSignedIn();
 
-      // 채팅 본문 길이 제한 및 작성자 위조 방지
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == request.auth.uid
+        && isValidNickname(request.resource.data.nickname);
+
+      allow update: if (
+          isOwner(uid)
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.email == resource.data.email
+          && request.resource.data.role == resource.data.role
+          && isValidNickname(request.resource.data.nickname)
+        ) || isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    // ----------------------------
+    // projects
+    // ----------------------------
+    match /projects/{projectId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 120
+        && request.resource.data.status is string;
+
+      allow update, delete: if isAdmin()
+        || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
+    }
+
+    // ----------------------------
+    // project_logs
+    // ----------------------------
+    match /project_logs/{logId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.projectId is string
+        && request.resource.data.summary is string
+        && request.resource.data.summary.size() > 0
+        && request.resource.data.summary.size() <= 800;
+
+      allow update, delete: if isAdmin()
+        || (isSignedIn() && resource.data.authorUid == request.auth.uid);
+    }
+
+    // ----------------------------
+    // project_threads
+    // ----------------------------
+    match /project_threads/{threadId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.projectId is string
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 120;
+
+      allow update, delete: if isAdmin()
+        || (isSignedIn() && resource.data.createdBy == request.auth.uid);
+    }
+
+    // 스레드 메시지는 하위 컬렉션으로 분리해 메시지 권한을 독립 관리
+    match /project_threads/{threadId}/messages/{messageId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.messageType in ['GENERAL', 'QUESTION', 'FEEDBACK', 'REFERENCE']
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 500;
+
+      allow update, delete: if isAdmin()
+        || (isSignedIn() && resource.data.authorUid == request.auth.uid);
+    }
+
+    // ----------------------------
+    // focus_sessions
+    // ----------------------------
+    match /focus_sessions/{sessionId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.userUid == request.auth.uid
+        && request.resource.data.durationSec is int
+        && request.resource.data.durationSec >= 0;
+
+      allow update, delete: if isAdmin()
+        || (isSignedIn() && resource.data.userUid == request.auth.uid);
+    }
+
+    // ----------------------------
+    // donations (서버 검증 기록 전용)
+    // ----------------------------
+    match /donations/{donationId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ----------------------------
+    // legacy messages (점진적 마이그레이션 용도)
+    // ----------------------------
+    match /messages/{messageId} {
+      allow read: if isSignedIn();
       allow create: if isSignedIn()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.text is string
         && request.resource.data.text.size() > 0
-        && request.resource.data.text.size() <= 300
-        && request.resource.data.nickname is string
-        && request.resource.data.nickname.size() > 0
-        && request.resource.data.timestamp == request.time;
-
-      // 채팅 수정/삭제는 관리자만 허용
+        && request.resource.data.text.size() <= 300;
       allow update, delete: if isAdmin();
-    }
-
-    match /donations/{donationId} {
-      // 후원 목록은 로그인 사용자만 읽기
-      allow read: if isSignedIn();
-
-      // 후원 기록은 서버(관리자 클레임)에서만 생성/수정하도록 제한
-      allow create, update, delete: if isAdmin();
     }
   }
 }

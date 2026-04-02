@@ -19,6 +19,89 @@ const DEMO_PATRONS = [
   { id: 'demo_patron_operator', nickname: 'NightShiftObserver', amount: 150000, to: 'DOCTORS', badge: 'CORE' },
 ];
 
+// 1차 레이아웃 개편용 샘플 데이터. 이후 Firestore 컬렉션으로 치환한다.
+const SAMPLE_PROJECTS = [
+  {
+    id: 'project_lounge_dashboard',
+    title: 'Realtime Lounge Dashboard',
+    status: '진행 중',
+    tags: ['REACT', 'FIREBASE'],
+    todayLog: '프로젝트 단위 채팅과 몰입 랭킹 UI를 스캐폴딩했습니다.',
+    retro: '채팅은 기록성, 랭킹은 몰입 리듬 중심으로 재정의합니다.',
+    demoUrl: 'https://example.com/demo/lounge',
+    repoUrl: 'https://github.com/example/lounge'
+  },
+  {
+    id: 'project_prompt_suite',
+    title: 'AI Prompt Engineering Suite',
+    status: '진행 중',
+    tags: ['NODE', 'OPENAI'],
+    todayLog: '지식 공유용 참고 링크 메시지 타입을 설계했습니다.',
+    retro: '질문-피드백-참고자료 구조로 회고 검색성을 높일 예정입니다.',
+    demoUrl: 'https://example.com/demo/prompt',
+    repoUrl: 'https://github.com/example/prompt-suite'
+  },
+  {
+    id: 'project_focus_tracker',
+    title: 'Focus Session Tracker',
+    status: '검증 중',
+    tags: ['ANALYTICS', 'TIMER'],
+    todayLog: '오늘 몰입 시간과 연속 작업일 계산 규칙을 점검했습니다.',
+    retro: '경쟁보다 지속성을 강조하는 랭킹 메시지로 교체합니다.',
+    demoUrl: 'https://example.com/demo/focus',
+    repoUrl: 'https://github.com/example/focus-tracker'
+  }
+];
+
+const SAMPLE_THREAD_MESSAGES = [
+  {
+    id: 'msg_1',
+    projectId: 'project_lounge_dashboard',
+    author: '하용',
+    type: '질문',
+    text: '프로젝트 보드 카드에서 로그와 회고를 동시에 보여주면 가독성이 어떨까요?',
+    time: '14:02'
+  },
+  {
+    id: 'msg_2',
+    projectId: 'project_lounge_dashboard',
+    author: '민권',
+    type: '피드백',
+    text: '회고는 접기/펼치기로 두면 카드 높이 흔들림을 줄일 수 있습니다.',
+    time: '14:05'
+  },
+  {
+    id: 'msg_3',
+    projectId: 'project_lounge_dashboard',
+    author: 'Alex_Dev',
+    type: '참고자료',
+    text: 'https://firebase.google.com/docs/firestore/security/get-started',
+    time: '14:08'
+  },
+  {
+    id: 'msg_4',
+    projectId: 'project_prompt_suite',
+    author: '하용',
+    type: '질문',
+    text: '프롬프트 버전 관리는 태그 기반이 좋을까요?',
+    time: '14:12'
+  },
+  {
+    id: 'msg_5',
+    projectId: 'project_focus_tracker',
+    author: '민권',
+    type: '일반',
+    text: '오늘은 연속 4일차를 목표로 진행합니다.',
+    time: '14:16'
+  }
+];
+
+const SAMPLE_FOCUS_RANKING = [
+  { id: 'rank_1', nickname: '하용', todayFocus: '08:42:12', streakDays: 12 },
+  { id: 'rank_2', nickname: 'CodeNinja', todayFocus: '07:55:30', streakDays: 8 },
+  { id: 'rank_3', nickname: '민권', todayFocus: '05:12:44', streakDays: 4 },
+];
+
 /**
  * 결제/후원 기록은 클라이언트가 Firestore에 직접 쓰지 않고
  * 서버 검증 함수에서만 기록하도록 강제한다.
@@ -922,6 +1005,11 @@ const ShortcutGuide = ({ isOpen, onClose }) => {
         onClick={e => e.stopPropagation()}
       >
         <h2 className="text-xl font-mono font-black mb-6 uppercase italic text-sentinel-green border-b border-sentinel-green/10 pb-4 italic font-headline text-left">시스템 단축키 안내</h2>
+        <div className="mb-5 rounded-2xl border border-sentinel-green/20 bg-sentinel-green/5 p-4 text-left">
+          <p className="text-[12px] leading-relaxed text-gray-700 dark:text-gray-200 font-sans">
+            이 공간은 작업물을 공유하고, 채팅으로 지식을 나누며, 실시간 순위로 몰입 시간을 함께 만드는 협업 실험실입니다.
+          </p>
+        </div>
         <div className="space-y-4 font-mono text-sm text-left">
           <div className="flex justify-between items-center text-black dark:text-white">
             <span className="text-gray-400 font-bold text-left">명령어 터미널</span>
@@ -1168,7 +1256,7 @@ const Chat = () => {
   const [input, setInput] = useState('');
   const [spamWarning, setSpamWarning] = useState('');
   const [chatError, setChatError] = useState(null);
-  const scrollRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const lastMessageRef = useRef({ text: '', timestamp: 0 });
   const unsubscribeRef = useRef(null);
@@ -1206,7 +1294,13 @@ const Chat = () => {
 
   useEffect(() => {
     if (!messages.length) return;
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    // 페이지 전체 스크롤이 아니라 채팅 영역 내부 스크롤만 이동시킨다.
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+      return;
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
   }, [messages]);
 
   const sendMessage = async (e) => {
@@ -1268,14 +1362,14 @@ const Chat = () => {
   };
 
   return (
-    <aside className="w-full h-full flex flex-col bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg font-sans text-left">
+    <aside className="w-full h-full min-h-0 flex flex-col bg-black/5 dark:bg-sentinel-dark-card border border-sentinel-green/20 rounded-3xl overflow-hidden backdrop-blur-sm shadow-glow-green dark:shadow-glow-green-lg font-sans text-left">
       <div className="p-4 border-b border-sentinel-green/10 bg-sentinel-green/5 flex items-center justify-between shadow-sm shadow-xl shadow-sm flex-shrink-0">
         <h3 className="font-sans font-black text-xs tracking-widest flex items-center gap-2 uppercase italic text-sentinel-green font-headline tracking-tight text-left">
           라이브 채널
         </h3>
         <LiveDot />
       </div>
-      <div className="flex-1 overflow-y-auto px-6 pt-4 pb-2 space-y-4 text-left shadow-inner">
+      <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto px-6 pt-4 pb-2 space-y-4 text-left shadow-inner">
         {messages.map(msg => (
           <div key={msg.id} className="space-y-1.5 text-left">
             <div className="flex items-center justify-between gap-3 text-left">
@@ -1324,6 +1418,171 @@ const Chat = () => {
         )}
       </div>
     </aside>
+  );
+};
+
+const SummaryCards = ({ projectCount, todayLogCount, focusTimeText }) => {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-6 shadow-[0_0_20px_rgba(0,255,148,0.07)]">
+        <p className="text-[11px] tracking-[0.2em] uppercase font-bold text-sentinel-green/80 mb-3">오늘 요약</p>
+        <p className="text-5xl font-mono font-black text-sentinel-green mb-2">{projectCount}</p>
+        <p className="text-sm text-gray-500 dark:text-gray-300">진행 중 프로젝트 수</p>
+      </div>
+      <div className="rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-6 shadow-[0_0_20px_rgba(0,255,148,0.07)]">
+        <p className="text-[11px] tracking-[0.2em] uppercase font-bold text-sentinel-green/80 mb-3">활동 로그</p>
+        <p className="text-5xl font-mono font-black text-sentinel-green mb-2">{todayLogCount}</p>
+        <p className="text-sm text-gray-500 dark:text-gray-300">오늘 커밋/기록 수</p>
+      </div>
+      <div className="rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-6 shadow-[0_0_20px_rgba(0,255,148,0.07)]">
+        <p className="text-[11px] tracking-[0.2em] uppercase font-bold text-sentinel-green/80 mb-3">현재 집중 세션</p>
+        <p className="text-5xl font-mono font-black text-sentinel-green mb-2">{focusTimeText}</p>
+        <p className="text-sm text-gray-500 dark:text-gray-300">몰입 시간 랭킹은 리듬을 위한 지표입니다.</p>
+      </div>
+    </div>
+  );
+};
+
+const ProjectBoardPanel = ({ projects }) => {
+  return (
+    <section className="rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-5 md:p-6 shadow-[0_0_24px_rgba(0,255,148,0.08)]">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="module-header-text text-sentinel-green">Module_03: 프로젝트_보드</h3>
+        <span className="text-xs text-sentinel-green/70 font-bold">작업물 아카이브</span>
+      </div>
+      <div className="space-y-4">
+        {projects.map((project) => (
+          <article key={project.id} className="rounded-2xl border border-sentinel-green/15 bg-black/15 dark:bg-black/25 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h4 className="text-lg font-bold text-black dark:text-white">{project.title}</h4>
+                <p className="text-xs text-sentinel-green mt-1">{project.status}</p>
+              </div>
+              <div className="flex flex-wrap gap-2 justify-end">
+                {project.tags.map((tag) => (
+                  <span key={`${project.id}_${tag}`} className="text-[10px] px-2 py-1 rounded-lg border border-sentinel-green/30 text-sentinel-green/80">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="mt-3 space-y-2 text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+              {/* 오늘 작업 로그와 회고를 분리해 발표 시 맥락 설명을 쉽게 만든다. */}
+              <p><span className="text-sentinel-green font-bold">오늘 작업:</span> {project.todayLog}</p>
+              <p><span className="text-sentinel-green font-bold">회고 메모:</span> {project.retro}</p>
+            </div>
+            <div className="mt-4 flex gap-3 text-xs">
+              <a href={project.demoUrl} target="_blank" rel="noreferrer" className="text-sentinel-green hover:underline">Demo</a>
+              <a href={project.repoUrl} target="_blank" rel="noreferrer" className="text-sentinel-green hover:underline">Repo</a>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+};
+
+const ProjectChatPanel = ({ projects, messages }) => {
+  const [activeProjectId, setActiveProjectId] = useState(projects[0]?.id || '');
+  const [draft, setDraft] = useState('');
+  const filteredMessages = messages.filter((message) => message.projectId === activeProjectId);
+
+  return (
+    <section className="h-full min-h-0 rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-4 md:p-5 shadow-[0_0_24px_rgba(0,255,148,0.08)] flex flex-col">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="module-header-text text-sentinel-green">Module_04: 프로젝트_채팅</h3>
+        <span className="text-xs text-sentinel-green/70 font-bold">기록형 협업</span>
+      </div>
+      <div className="grid grid-cols-1 gap-2 mb-3">
+        {projects.map((project) => (
+          <button
+            key={project.id}
+            type="button"
+            onClick={() => setActiveProjectId(project.id)}
+            className={`text-left rounded-xl px-3 py-2 border text-sm transition ${
+              activeProjectId === project.id
+                ? 'border-sentinel-green/60 bg-sentinel-green/10 text-sentinel-green'
+                : 'border-sentinel-green/20 bg-black/20 text-gray-400'
+            }`}
+          >
+            {project.title}
+          </button>
+        ))}
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3">
+        {filteredMessages.map((message) => (
+          <div key={message.id} className="rounded-xl border border-sentinel-green/10 bg-black/25 p-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-bold text-sentinel-green">{message.author}</span>
+              <span className="text-[11px] text-gray-500">{message.time}</span>
+            </div>
+            <p className="text-[11px] text-sentinel-green/80 mb-1">{message.type}</p>
+            <p className="text-sm text-gray-700 dark:text-gray-300 break-words">{message.text}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 pt-3 border-t border-sentinel-green/15">
+        {/* 실제 전송은 2차에서 Firestore thread_messages 연결로 교체한다. */}
+        <form onSubmit={(event) => event.preventDefault()} className="flex gap-2">
+          <input
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="질문, 피드백, 참고자료 링크를 입력하세요."
+            className="flex-1 rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm text-black dark:text-white"
+          />
+          <button type="submit" className="px-3 py-2 rounded-xl border border-sentinel-green/50 text-sentinel-green text-sm font-bold">
+            등록
+          </button>
+        </form>
+      </div>
+    </section>
+  );
+};
+
+const FocusAidPanel = () => {
+  return (
+    <section className="rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-5 md:p-6 shadow-[0_0_24px_rgba(0,255,148,0.08)]">
+      <h3 className="module-header-text text-sentinel-green mb-4">Module_05: 몰입_보조</h3>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="rounded-2xl border border-sentinel-green/15 bg-black/20 p-4">
+          <p className="text-sm font-bold text-white">로파이 라디오</p>
+          <p className="text-xs text-gray-400 mt-1">작업 몰입을 위한 배경 사운드</p>
+        </div>
+        <div className="rounded-2xl border border-sentinel-green/15 bg-black/20 p-4">
+          <p className="text-sm font-bold text-white">화이트 노이즈</p>
+          <p className="text-xs text-gray-400 mt-1">환경 소음을 덮어주는 집중 모드</p>
+        </div>
+        <div className="rounded-2xl border border-sentinel-green/15 bg-black/20 p-4">
+          <p className="text-sm font-bold text-white">집중 세션 시작</p>
+          <p className="text-xs text-gray-400 mt-1">타이머를 시작하고 몰입 시간을 기록</p>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const FocusRankingPanel = ({ ranking }) => {
+  return (
+    <section className="rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-5 md:p-6 shadow-[0_0_24px_rgba(0,255,148,0.08)]">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="module-header-text text-sentinel-green">몰입 시간 랭킹</h3>
+        <span className="text-xs text-sentinel-green/70 font-bold">성과 비교가 아닌 리듬 지표</span>
+      </div>
+      <div className="space-y-3">
+        {ranking.map((row, index) => (
+          <div key={row.id} className="rounded-2xl border border-sentinel-green/10 bg-black/20 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-sentinel-green font-mono font-black text-lg">{String(index + 1).padStart(2, '0')}</span>
+              <span className="text-black dark:text-white font-bold">{row.nickname}</span>
+            </div>
+            <div className="text-right">
+              <p className="font-mono font-black text-sentinel-green">{row.todayFocus}</p>
+              <p className="text-xs text-gray-500">연속 {row.streakDays}일</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 };
 
@@ -1484,6 +1743,11 @@ function App() {
     };
   }, [user, showNicknameModal]);
 
+  // 샘플 단계에서는 정적 데이터로 화면 구조를 먼저 검증한다.
+  const sampleProjectCount = SAMPLE_PROJECTS.length;
+  const sampleTodayLogCount = SAMPLE_PROJECTS.length * 2;
+  const focusTimeText = formatTime(survivalTime);
+
   return (
     <div className="min-h-screen bg-white dark:bg-sentinel-dark-bg text-black dark:text-white selection:bg-sentinel-green selection:text-black antialiased transition-colors duration-500 font-sans text-left overflow-x-hidden shadow-sm">
       <WelcomeSplash user={user} visible={showSplash} />
@@ -1561,63 +1825,37 @@ function App() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.8, delay: !showNicknameModal ? 0.3 : 0 }}
-          className="max-w-7xl mx-auto px-4 pt-24 pb-12 grid grid-cols-1 lg:grid-cols-12 items-start gap-4 text-left text-left text-left text-left shadow-sm"
+          className="max-w-7xl mx-auto px-4 pt-24 pb-12 space-y-5"
         >
-          {/* Top Section: Module 01 & 02 */}
-          <div className="lg:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-4 text-left shadow-sm">
-            {/* Module 01: System Status */}
-            <div className="md:col-span-1 text-left shadow-sm flex-shrink-0">
-              <SystemStatus 
-                competitorCount={competitorStats.count} 
-                myRank={competitorStats.myRank}
-              />
+          <section className="rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-6 shadow-[0_0_24px_rgba(0,255,148,0.08)]">
+            <h2 className="text-3xl md:text-4xl font-black text-black dark:text-white leading-tight tracking-tight">
+              작업물을 공유하고 함께 발전시키는 <span className="text-sentinel-green">실시간 개발 공간</span>
+            </h2>
+            <p className="mt-3 text-base text-gray-600 dark:text-gray-300">
+              채팅으로 지식을 나누고, 기록으로 성장 과정을 남기세요.
+            </p>
+            <p className="mt-1 text-sm text-sentinel-green/80">
+              몰입 시간 랭킹으로 서로의 작업 리듬을 자극합니다.
+            </p>
+          </section>
+
+          <SummaryCards
+            projectCount={sampleProjectCount}
+            todayLogCount={sampleTodayLogCount}
+            focusTimeText={focusTimeText}
+          />
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 items-stretch gap-4">
+            <div ref={leftModulesRef} className="lg:col-span-8 space-y-4">
+              <ProjectBoardPanel projects={SAMPLE_PROJECTS} />
+              <FocusAidPanel />
+              <FocusRankingPanel ranking={SAMPLE_FOCUS_RANKING} />
             </div>
-
-            {/* Module 02: Survival Timer */}
-            <div className="md:col-span-2 text-left shadow-sm flex-shrink-0">
-              <SurvivalTimer />
-            </div>
-          </div>
-
-          {/* Main Section: Module 03, 04, 05 */}
-          <div className="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 items-stretch gap-4 text-left shadow-sm">
-            {/* Left Column: Leaderboard (Module 03) + Minigame Hub (Module 05) */}
-            <div ref={leftModulesRef} className="lg:col-span-8 flex flex-col self-stretch text-left text-left shadow-sm gap-3">
-              {/* Module 3: Live Leaderboard (Top 5 Only) */}
-              <div className="space-y-1.5 text-left font-sans text-left text-left text-left text-left shadow-sm flex-shrink-0">
-                <div className="flex items-center justify-between px-4 font-sans font-black font-sans font-black font-sans font-black font-sans font-black shadow-sm shadow-sm shadow-sm shadow-sm">
-                  <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm">Module_03: 실시간_순위</h3>
-                  <span className="font-sans text-[9px] text-sentinel-green/60 uppercase italic tracking-widest font-headline italic italic italic italic italic italic shadow-sm shadow-sm shadow-sm text-right shadow-sm shadow-sm shadow-sm shadow-sm">TOP 5</span>
-                </div>
-                <LeaderboardTable onRankUpdate={handleRankUpdate} maxRank={5} />
-              </div>
-
-              {/* Module 5: Minigame Hub (Flex-grow) */}
-              <div className="flex-1 flex flex-col min-h-0 font-sans text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm pt-3">
-                <div className="flex items-center justify-between px-4 mb-2 flex-shrink-0 shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
-                  <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Module_05: 미니게임_허브</h3>
-                </div>
-                <div className="flex-1 min-h-0 overflow-y-auto">
-                  <MinigameHub />
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column: Communication (Module 04) */}
             <div
-              className="lg:col-span-4 flex flex-col space-y-1.5 overflow-hidden font-sans text-left text-left text-left text-left text-left text-left shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm"
+              className="lg:col-span-4 min-h-0"
               style={module04Height ? { height: `${module04Height}px`, maxHeight: `${module04Height}px` } : undefined}
             >
-              <div className="flex items-center justify-between px-2 text-left text-left text-left text-left text-left text-left text-left text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
-                <h3 className="module-header-text text-gray-400 dark:text-gray-500 text-left shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">Module_04: 시스템_통신</h3>
-                <div className="flex items-center gap-2">
-                  <span className="font-sans text-[9px] text-sentinel-green/60 uppercase italic tracking-widest opacity-60 shadow-sm text-right">보안 링크 활성</span>
-                  <div className="w-2 h-2 bg-sentinel-green rounded-full animate-pulse shadow-[0_0_8px_rgba(0,255,148,0.8)]"></div>
-                </div>
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <Chat />
-              </div>
+              <ProjectChatPanel projects={SAMPLE_PROJECTS} messages={SAMPLE_THREAD_MESSAGES} />
             </div>
           </div>
         </motion.div>
