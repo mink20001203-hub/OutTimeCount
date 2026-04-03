@@ -2029,6 +2029,34 @@ const FocusRankingPanel = ({ ranking }) => {
   );
 };
 
+const DevLoungePulseLogo = ({ compact = false }) => {
+  return (
+    <div className={`inline-flex items-center ${compact ? 'gap-2' : 'gap-3'}`}>
+      <svg width={compact ? '26' : '34'} height={compact ? '26' : '34'} viewBox="0 0 64 64" aria-label="DevLounge Pulse Logo">
+        <defs>
+          <filter id="pulseGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="1.2" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <rect x="2" y="2" width="60" height="60" rx="14" fill="#07131A" />
+        <g filter="url(#pulseGlow)" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M16 20L9 32L16 44" stroke="#26F2B5" strokeWidth="3.6" />
+          <path d="M48 20L55 32L48 44" stroke="#26F2B5" strokeWidth="3.6" />
+          <path d="M20 32H27L30 25L33 38L36 29H43" stroke="#59FFA0" strokeWidth="3.2" />
+        </g>
+      </svg>
+      <div className="leading-none">
+        <p className="text-[12px] font-black tracking-tight text-sentinel-green">DevLounge Pulse</p>
+        {!compact && <p className="text-[10px] text-sentinel-green/70 font-bold mt-1">DLP v1.0</p>}
+      </div>
+    </div>
+  );
+};
+
 // --- App Root ---
 
 function App() {
@@ -2636,8 +2664,8 @@ function App() {
 
       <header className="fixed top-0 left-0 w-full z-[100] px-6 py-4 flex justify-between items-center pointer-events-none shadow-sm shadow-sm">
         <div className="pointer-events-auto shadow-sm">
-          <div className="bg-black dark:bg-sentinel-green text-sentinel-green dark:text-black font-mono font-black px-4 py-2 rounded-xl text-xs uppercase tracking-tighter italic shadow-2xl shadow-xl font-headline tracking-tight shadow-sm text-left shadow-sm">
-            센티넬 v2.4
+          <div className="bg-black/80 border border-sentinel-green/30 px-3 py-2 rounded-xl shadow-2xl shadow-xl backdrop-blur-sm">
+            <DevLoungePulseLogo compact />
           </div>
         </div>
         <div className="pointer-events-auto flex items-center gap-3 shadow-xl shadow-xl shadow-sm shadow-sm">
@@ -2745,7 +2773,7 @@ function App() {
             <div className="w-24 h-24 bg-black dark:bg-sentinel-green rounded-[32px] mx-auto flex items-center justify-center mb-10 shadow-2xl rotate-6 transition-transform hover:rotate-12 duration-500 shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">
               <span className="text-4xl dark:grayscale drop-shadow-xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-2xl shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">!</span>
             </div>
-            <h2 className="text-4xl font-mono font-black mb-4 uppercase italic tracking-tighter text-black dark:text-white italic tracking-tight font-headline shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-center shadow-sm">디지털 센티넬</h2>
+            <h2 className="text-4xl font-mono font-black mb-4 uppercase italic tracking-tighter text-black dark:text-white italic tracking-tight font-headline shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-center shadow-sm">DEVLOUNGE PULSE</h2>
             <p className="text-gray-500 dark:text-gray-400 font-sans text-base uppercase tracking-[0.3em] mb-12 leading-relaxed italic font-black opacity-80 text-center">접근 권한이 필요합니다<br/>보안 프로토콜을 초기화하세요</p>
             <button
               className="w-full py-5 bg-black dark:bg-sentinel-green dark:text-black hover:bg-sentinel-green dark:hover:bg-sentinel-green/80 text-white hover:text-black font-mono font-black text-sm rounded-[24px] transition-all duration-500 uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.1)] hover:shadow-sentinel-green/30 active:scale-95 font-headline shadow-lg shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm text-center shadow-xl shadow-xl shadow-xl"
@@ -2753,7 +2781,7 @@ function App() {
             >
               Google로 접속
             </button>
-            <p className="mt-10 font-mono text-[9px] text-gray-300 dark:text-gray-600 uppercase tracking-[0.5em] font-black opacity-40 italic font-sans text-center text-center text-center text-center text-center text-center text-center text-center text-center font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">SENTINEL_SYSTEM_V2.4</p>
+            <p className="mt-10 font-mono text-[9px] text-gray-300 dark:text-gray-600 uppercase tracking-[0.5em] font-black opacity-40 italic font-sans text-center text-center text-center text-center text-center text-center text-center text-center text-center font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">DEVLOUNGE_PULSE_V1.0</p>
           </div>
         </div>
       )}
