@@ -62,7 +62,7 @@ service cloud.firestore {
     }
 
     match /projects/{projectId} {
-      allow read: if isSignedIn();
+      allow read: if canAccessProject(projectId);
 
       allow create: if isSignedIn()
         && request.resource.data.ownerUid == request.auth.uid
@@ -73,9 +73,13 @@ service cloud.firestore {
         && request.resource.data.members is list
         && request.auth.uid in request.resource.data.members;
 
+      // 프로젝트 메타/멤버 관리는 오너(또는 관리자)만 가능하도록 제한한다.
       allow update: if isAdmin() || (
-          canAccessProject(projectId)
+          isSignedIn()
+          && resource.data.ownerUid == request.auth.uid
           && request.resource.data.ownerUid == resource.data.ownerUid
+          && request.resource.data.members is list
+          && request.auth.uid in request.resource.data.members
         );
 
       allow delete: if isAdmin() || (
@@ -84,7 +88,7 @@ service cloud.firestore {
     }
 
     match /project_logs/{logId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && canAccessProject(resource.data.projectId);
 
       allow create: if isSignedIn()
         && request.resource.data.authorUid == request.auth.uid
@@ -111,7 +115,7 @@ service cloud.firestore {
     }
 
     match /project_threads/{threadId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && canAccessProject(resource.data.projectId);
 
       allow create: if isSignedIn()
         && request.resource.data.createdBy == request.auth.uid
@@ -127,7 +131,8 @@ service cloud.firestore {
     }
 
     match /project_threads/{threadId}/messages/{messageId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn()
+        && canAccessProject(get(/databases/$(database)/documents/project_threads/$(threadId)).data.projectId);
 
       allow create: if isSignedIn()
         && request.resource.data.authorUid == request.auth.uid

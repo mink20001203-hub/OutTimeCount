@@ -2253,6 +2253,9 @@ function App() {
     // 날짜 키는 focus_sessions 집계 필터에 사용한다.
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const lookbackDate = new Date(today);
+    lookbackDate.setDate(today.getDate() - 13);
+    const lookbackKey = `${lookbackDate.getFullYear()}-${String(lookbackDate.getMonth() + 1).padStart(2, '0')}-${String(lookbackDate.getDate()).padStart(2, '0')}`;
 
     const unsubscribers = [];
 
@@ -2286,8 +2289,10 @@ function App() {
 
     const focusQuery = query(
       collection(db, 'focus_sessions'),
-      where('dateKey', '==', todayKey),
-      limit(500)
+      where('dateKey', '>=', lookbackKey),
+      where('dateKey', '<=', todayKey),
+      orderBy('dateKey', 'desc'),
+      limit(1200)
     );
     unsubscribers.push(onSnapshot(focusQuery, (snapshot) => {
       const next = snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
@@ -2387,29 +2392,57 @@ function App() {
     };
   });
 
+  const toDateKey = (dateObj) => {
+    return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+  };
+
+  const calculateStreak = (daySet, endKey) => {
+    // daySet에 저장된 날짜 키를 기준으로 오늘부터 연속 일수를 계산한다.
+    let streak = 0;
+    const cursor = new Date(`${endKey}T00:00:00`);
+    while (true) {
+      const key = toDateKey(cursor);
+      if (!daySet.has(key)) break;
+      streak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return streak;
+  };
+
   const focusAggregation = new Map();
   focusSessions.forEach((session) => {
     const key = session.userUid || session.nickname || session.id;
+    const dayKey = session.dateKey || '';
     if (!focusAggregation.has(key)) {
       focusAggregation.set(key, {
         id: key,
         nickname: session.nickname || `사용자_${String(key).slice(0, 4)}`,
-        totalSeconds: 0,
-        streakDays: session.streakDays || 1
+        todaySeconds: 0,
+        dayKeys: new Set()
       });
     }
     const row = focusAggregation.get(key);
-    row.totalSeconds += Number(session.durationSec || 0);
-    row.streakDays = Math.max(row.streakDays, Number(session.streakDays || 1));
+    const duration = Number(session.durationSec || 0);
+    if (dayKey === toDateKey(new Date())) {
+      row.todaySeconds += duration;
+    }
+    if (dayKey) row.dayKeys.add(dayKey);
   });
 
   const rankingFromFirestore = Array.from(focusAggregation.values())
-    .sort((a, b) => b.totalSeconds - a.totalSeconds)
+    .map((row) => ({
+      id: row.id,
+      nickname: row.nickname,
+      todayFocus: formatTime(row.todaySeconds),
+      todaySeconds: row.todaySeconds,
+      streakDays: calculateStreak(row.dayKeys, toDateKey(new Date()))
+    }))
+    .sort((a, b) => b.todaySeconds - a.todaySeconds)
     .slice(0, 10)
     .map((row) => ({
       id: row.id,
       nickname: row.nickname,
-      todayFocus: formatTime(row.totalSeconds),
+      todayFocus: row.todayFocus,
       streakDays: row.streakDays
     }));
   const focusRanking = rankingFromFirestore.length ? rankingFromFirestore : SAMPLE_FOCUS_RANKING;
