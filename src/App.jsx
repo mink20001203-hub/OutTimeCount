@@ -1468,6 +1468,7 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
     links: ''
   });
   const [statusMessage, setStatusMessage] = useState('');
+  const [statusTone, setStatusTone] = useState('success');
   const [isBusy, setIsBusy] = useState(false);
   const [editingLogId, setEditingLogId] = useState('');
   const [editingLogForm, setEditingLogForm] = useState({ summary: '', retro: '', links: '' });
@@ -1504,15 +1505,37 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
     setLogForm((prev) => ({ ...prev, projectId: selected.id }));
   }, [projects, editProjectId]);
 
+  const isValidHttpUrl = (value) => {
+    if (!value) return true;
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
   const handleCreateProject = async (event) => {
     event.preventDefault();
     if (!onCreateProject) return;
+    if (!createForm.title.trim()) {
+      setStatusTone('error');
+      setStatusMessage('프로젝트 제목은 필수입니다.');
+      return;
+    }
+    if (!isValidHttpUrl(createForm.demoUrl) || !isValidHttpUrl(createForm.repoUrl)) {
+      setStatusTone('error');
+      setStatusMessage('Demo/Repo URL은 http 또는 https 형식이어야 합니다.');
+      return;
+    }
     try {
       setIsBusy(true);
       await onCreateProject(createForm);
       setCreateForm({ title: '', description: '', status: '진행 중', tags: '', demoUrl: '', repoUrl: '' });
+      setStatusTone('success');
       setStatusMessage('프로젝트 카드가 생성되었습니다.');
     } catch (error) {
+      setStatusTone('error');
       setStatusMessage(error.message || '프로젝트 생성 중 오류가 발생했습니다.');
     } finally {
       setIsBusy(false);
@@ -1522,11 +1545,23 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
   const handleUpdateProject = async (event) => {
     event.preventDefault();
     if (!onUpdateProject || !editProjectId) return;
+    if (!editForm.title.trim()) {
+      setStatusTone('error');
+      setStatusMessage('프로젝트 제목은 필수입니다.');
+      return;
+    }
+    if (!isValidHttpUrl(editForm.demoUrl) || !isValidHttpUrl(editForm.repoUrl)) {
+      setStatusTone('error');
+      setStatusMessage('Demo/Repo URL은 http 또는 https 형식이어야 합니다.');
+      return;
+    }
     try {
       setIsBusy(true);
       await onUpdateProject(editProjectId, editForm);
+      setStatusTone('success');
       setStatusMessage('프로젝트 카드가 수정되었습니다.');
     } catch (error) {
+      setStatusTone('error');
       setStatusMessage(error.message || '프로젝트 수정 중 오류가 발생했습니다.');
     } finally {
       setIsBusy(false);
@@ -1536,12 +1571,19 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
   const handleCreateLog = async (event) => {
     event.preventDefault();
     if (!onCreateLog || !logForm.projectId) return;
+    if (!logForm.summary.trim()) {
+      setStatusTone('error');
+      setStatusMessage('오늘 작업 내용은 필수입니다.');
+      return;
+    }
     try {
       setIsBusy(true);
       await onCreateLog(logForm);
       setLogForm((prev) => ({ ...prev, summary: '', retro: '', links: '' }));
+      setStatusTone('success');
       setStatusMessage('오늘 작업 로그가 저장되었습니다.');
     } catch (error) {
+      setStatusTone('error');
       setStatusMessage(error.message || '작업 로그 저장 중 오류가 발생했습니다.');
     } finally {
       setIsBusy(false);
@@ -1568,9 +1610,11 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
     try {
       setIsBusy(true);
       await onUpdateLog(editingLogId, editingLogForm);
+      setStatusTone('success');
       setStatusMessage('작업 로그가 수정되었습니다.');
       cancelEditLog();
     } catch (error) {
+      setStatusTone('error');
       setStatusMessage(error.message || '작업 로그 수정 중 오류가 발생했습니다.');
     } finally {
       setIsBusy(false);
@@ -1582,9 +1626,11 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
     try {
       setIsBusy(true);
       await onDeleteLog(logId);
+      setStatusTone('success');
       setStatusMessage('작업 로그가 삭제되었습니다.');
       if (editingLogId === logId) cancelEditLog();
     } catch (error) {
+      setStatusTone('error');
       setStatusMessage(error.message || '작업 로그 삭제 중 오류가 발생했습니다.');
     } finally {
       setIsBusy(false);
@@ -1600,12 +1646,12 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
         <form onSubmit={handleCreateProject} className="rounded-2xl border border-sentinel-green/15 bg-black/20 p-4 space-y-2">
           <p className="text-sm font-bold text-sentinel-green">프로젝트 생성</p>
-          <input value={createForm.title} onChange={(event) => setCreateForm((prev) => ({ ...prev, title: event.target.value }))} placeholder="프로젝트 제목" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+          <input value={createForm.title} maxLength={120} onChange={(event) => setCreateForm((prev) => ({ ...prev, title: event.target.value }))} placeholder="프로젝트 제목" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
           <input value={createForm.description} onChange={(event) => setCreateForm((prev) => ({ ...prev, description: event.target.value }))} placeholder="설명" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
           <input value={createForm.tags} onChange={(event) => setCreateForm((prev) => ({ ...prev, tags: event.target.value }))} placeholder="태그(쉼표 구분)" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
           <input value={createForm.demoUrl} onChange={(event) => setCreateForm((prev) => ({ ...prev, demoUrl: event.target.value }))} placeholder="Demo URL" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
           <input value={createForm.repoUrl} onChange={(event) => setCreateForm((prev) => ({ ...prev, repoUrl: event.target.value }))} placeholder="Repo URL" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
-          <button type="submit" disabled={isBusy} className="w-full rounded-xl border border-sentinel-green/50 px-3 py-2 text-sm font-bold text-sentinel-green disabled:opacity-50">생성</button>
+          <button type="submit" disabled={isBusy} className="w-full rounded-xl border border-sentinel-green/50 px-3 py-2 text-sm font-bold text-sentinel-green disabled:opacity-50">{isBusy ? '처리 중' : '생성'}</button>
         </form>
 
         <form onSubmit={handleUpdateProject} className="rounded-2xl border border-sentinel-green/15 bg-black/20 p-4 space-y-2">
@@ -1613,10 +1659,10 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
           <select value={editProjectId} onChange={(event) => setEditProjectId(event.target.value)} className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm">
             {projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
           </select>
-          <input value={editForm.title} onChange={(event) => setEditForm((prev) => ({ ...prev, title: event.target.value }))} placeholder="프로젝트 제목" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
+          <input value={editForm.title} maxLength={120} onChange={(event) => setEditForm((prev) => ({ ...prev, title: event.target.value }))} placeholder="프로젝트 제목" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
           <input value={editForm.description} onChange={(event) => setEditForm((prev) => ({ ...prev, description: event.target.value }))} placeholder="설명" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
           <input value={editForm.tags} onChange={(event) => setEditForm((prev) => ({ ...prev, tags: event.target.value }))} placeholder="태그(쉼표 구분)" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
-          <button type="submit" disabled={isBusy || !editProjectId} className="w-full rounded-xl border border-sentinel-green/50 px-3 py-2 text-sm font-bold text-sentinel-green disabled:opacity-50">수정</button>
+          <button type="submit" disabled={isBusy || !editProjectId} className="w-full rounded-xl border border-sentinel-green/50 px-3 py-2 text-sm font-bold text-sentinel-green disabled:opacity-50">{isBusy ? '처리 중' : '수정'}</button>
         </form>
 
         <form onSubmit={handleCreateLog} className="rounded-2xl border border-sentinel-green/15 bg-black/20 p-4 space-y-2">
@@ -1627,7 +1673,7 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
           <input value={logForm.summary} onChange={(event) => setLogForm((prev) => ({ ...prev, summary: event.target.value }))} placeholder="오늘 작업 내용" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
           <input value={logForm.retro} onChange={(event) => setLogForm((prev) => ({ ...prev, retro: event.target.value }))} placeholder="회고 메모" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
           <input value={logForm.links} onChange={(event) => setLogForm((prev) => ({ ...prev, links: event.target.value }))} placeholder="관련 링크(쉼표 구분)" className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm" />
-          <button type="submit" disabled={isBusy || !logForm.projectId} className="w-full rounded-xl border border-sentinel-green/50 px-3 py-2 text-sm font-bold text-sentinel-green disabled:opacity-50">저장</button>
+          <button type="submit" disabled={isBusy || !logForm.projectId} className="w-full rounded-xl border border-sentinel-green/50 px-3 py-2 text-sm font-bold text-sentinel-green disabled:opacity-50">{isBusy ? '처리 중' : '저장'}</button>
         </form>
       </div>
       <div className="mt-4 rounded-2xl border border-sentinel-green/15 bg-black/20 p-4">
@@ -1674,7 +1720,11 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
           </form>
         )}
       </div>
-      {statusMessage && <p className="mt-3 text-xs text-sentinel-green/80">{statusMessage}</p>}
+      {statusMessage && (
+        <p className={`mt-3 text-xs ${statusTone === 'error' ? 'text-red-400' : 'text-sentinel-green/80'}`}>
+          {statusMessage}
+        </p>
+      )}
     </section>
   );
 };
@@ -2004,12 +2054,14 @@ function App() {
   const [focusSessions, setFocusSessions] = useState([]);
   const [loungeDataReady, setLoungeDataReady] = useState(false);
   const [viewportHeight, setViewportHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 900);
+  const [viewportWidth, setViewportWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1440);
   const [chatQueryState, setChatQueryState] = useState({
     projectId: '',
     keyword: '',
     type: 'ALL',
     recentLimit: 150
   });
+  const activeFocusStartRef = useRef(null);
 
   const [showInitializing, setShowInitializing] = useState(false);
   const [hasPlayedWelcomeSequence, setHasPlayedWelcomeSequence] = useState(() => sessionStorage.getItem('sentinel_boot_sequence') === 'done');
@@ -2150,7 +2202,10 @@ function App() {
   }, [user, showNicknameModal]);
 
   useEffect(() => {
-    const syncViewport = () => setViewportHeight(window.innerHeight);
+    const syncViewport = () => {
+      setViewportHeight(window.innerHeight);
+      setViewportWidth(window.innerWidth);
+    };
     syncViewport();
     window.addEventListener('resize', syncViewport);
     return () => window.removeEventListener('resize', syncViewport);
@@ -2506,6 +2561,43 @@ function App() {
     await deleteDoc(doc(db, 'project_logs', logId));
   };
 
+  useEffect(() => {
+    if (!user) {
+      activeFocusStartRef.current = null;
+      return;
+    }
+
+    const persistFocusSession = async (startMs, endMs) => {
+      const durationSec = Math.floor((endMs - startMs) / 1000);
+      // 너무 짧은 세션은 노이즈 데이터로 간주하고 저장하지 않는다.
+      if (durationSec < 30) return;
+      const startedAt = new Date(startMs);
+      const endedAt = new Date(endMs);
+      const dateKey = `${startedAt.getFullYear()}-${String(startedAt.getMonth() + 1).padStart(2, '0')}-${String(startedAt.getDate()).padStart(2, '0')}`;
+      await addDoc(collection(db, 'focus_sessions'), {
+        userUid: user.uid,
+        nickname: profile?.nickname || '게스트',
+        startedAt,
+        endedAt,
+        durationSec,
+        dateKey
+      });
+    };
+
+    if (isActive && !isTerminated) {
+      if (!activeFocusStartRef.current) {
+        activeFocusStartRef.current = Date.now();
+      }
+      return;
+    }
+
+    if (activeFocusStartRef.current) {
+      const startMs = activeFocusStartRef.current;
+      activeFocusStartRef.current = null;
+      void persistFocusSession(startMs, Date.now());
+    }
+  }, [user, profile?.nickname, isActive, isTerminated]);
+
   return (
     <div className="min-h-screen bg-white dark:bg-sentinel-dark-bg text-black dark:text-white selection:bg-sentinel-green selection:text-black antialiased transition-colors duration-500 font-sans text-left overflow-x-hidden shadow-sm">
       <WelcomeSplash user={user} visible={showSplash} />
@@ -2627,11 +2719,11 @@ function App() {
                 module04Height
                   ? {
                       height: `${Math.min(module04Height, Math.floor(viewportHeight * 1.35))}px`,
-                      minHeight: `${Math.floor(viewportHeight * 0.82)}px`,
+                      minHeight: viewportWidth >= 1024 ? `${Math.floor(viewportHeight * 0.82)}px` : '520px',
                       maxHeight: `calc(100vh - 28px)`
                     }
                   : {
-                      minHeight: `560px`,
+                      minHeight: viewportWidth >= 1024 ? '560px' : '520px',
                       maxHeight: `calc(100vh - 28px)`
                     }
               }

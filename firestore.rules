@@ -141,6 +141,8 @@ service cloud.firestore {
         && request.resource.data.text is string
         && request.resource.data.text.size() > 0
         && request.resource.data.text.size() <= 500
+        && request.resource.data.messageKeywords is list
+        && request.resource.data.messageKeywords.size() <= 20
         && request.resource.data.createdAt == request.time;
 
       allow update, delete: if isAdmin() || (
@@ -153,8 +155,13 @@ service cloud.firestore {
 
       allow create: if isSignedIn()
         && request.resource.data.userUid == request.auth.uid
+        && request.resource.data.startedAt is timestamp
+        && request.resource.data.endedAt is timestamp
+        && request.resource.data.dateKey is string
+        && request.resource.data.dateKey.size() == 10
         && request.resource.data.durationSec is int
-        && request.resource.data.durationSec >= 0;
+        && request.resource.data.durationSec >= 30
+        && request.resource.data.durationSec <= 86400;
 
       allow update, delete: if isAdmin() || (
           isSignedIn() && resource.data.userUid == request.auth.uid
