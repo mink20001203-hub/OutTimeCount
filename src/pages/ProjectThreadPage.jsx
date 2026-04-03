@@ -52,6 +52,8 @@ const ProjectThreadPage = () => {
   const [inviteRole, setInviteRole] = useState('viewer');
   const [toast, setToast] = useState({ text: '', tone: 'ok' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [baseViewportHeight, setBaseViewportHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 900);
+  const [visualViewportHeight, setVisualViewportHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 900);
 
   const [editingMessageId, setEditingMessageId] = useState('');
   const [editingMessageText, setEditingMessageText] = useState('');
@@ -90,6 +92,37 @@ const ProjectThreadPage = () => {
   const canViewProject = Boolean(myRole);
   const canEditProjectContent = myRole === 'admin' || myRole === 'owner' || myRole === 'editor';
   const canManageMembers = myRole === 'admin' || myRole === 'owner';
+  const canPostMessage = canEditProjectContent;
+  const keyboardInset = Math.max(0, baseViewportHeight - visualViewportHeight);
+  const roleLabel =
+    myRole === 'admin'
+      ? '관리자'
+      : myRole === 'owner'
+      ? '소유자'
+      : myRole === 'editor'
+      ? '편집자'
+      : myRole === 'viewer'
+      ? '뷰어'
+      : '미지정';
+
+  useEffect(() => {
+    const syncBaseViewport = () => setBaseViewportHeight(window.innerHeight);
+    syncBaseViewport();
+    window.addEventListener('resize', syncBaseViewport);
+    return () => window.removeEventListener('resize', syncBaseViewport);
+  }, []);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) {
+      setVisualViewportHeight(window.innerHeight);
+      return;
+    }
+    const syncVisualViewport = () => setVisualViewportHeight(Math.floor(viewport.height));
+    syncVisualViewport();
+    viewport.addEventListener('resize', syncVisualViewport);
+    return () => viewport.removeEventListener('resize', syncVisualViewport);
+  }, []);
 
   useEffect(() => {
     if (!projectId) return;
@@ -225,7 +258,7 @@ const ProjectThreadPage = () => {
 
   const handleSend = async (event) => {
     event.preventDefault();
-    if (!user || !projectId || !canViewProject) return;
+    if (!user || !projectId || !canPostMessage) return;
     const text = draft.trim();
     if (!text) return;
     if (text.length > 500) {
@@ -460,7 +493,12 @@ const ProjectThreadPage = () => {
         </div>
 
         <section className="rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-4 sm:p-5 space-y-3">
-          <h1 className="text-2xl font-black text-sentinel-green">{project?.title || '프로젝트 로딩 중'}</h1>
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="text-2xl font-black text-sentinel-green">{project?.title || '프로젝트 로딩 중'}</h1>
+            <span className="text-xs px-2 py-1 rounded-lg border border-sentinel-green/30 text-sentinel-green/90">
+              내 권한: {roleLabel}
+            </span>
+          </div>
           <p className="text-sm text-gray-400">{project?.description || '프로젝트 설명이 없습니다.'}</p>
           <div className="flex flex-wrap gap-2">
             {(project?.tags || []).map((tag) => (
@@ -493,7 +531,7 @@ const ProjectThreadPage = () => {
 
         {canViewProject && (
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <section className="xl:col-span-2 rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-4 md:p-5 flex flex-col min-h-[68vh] sm:min-h-[72vh]">
+            <section className="xl:col-span-2 rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-4 md:p-5 flex flex-col min-h-[56vh] sm:min-h-[64vh] lg:min-h-[68vh]">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
                 <select
                   value={messageTypeFilter}
@@ -593,25 +631,39 @@ const ProjectThreadPage = () => {
                 {!messages.length && <p className="text-sm text-gray-500">조건에 맞는 메시지가 없습니다.</p>}
               </div>
 
-              <form onSubmit={handleSend} className="mt-3 pt-3 border-t border-sentinel-green/20 flex flex-col sm:flex-row gap-2">
+              <form
+                onSubmit={handleSend}
+                className="mt-3 pt-3 border-t border-sentinel-green/20 flex flex-col sm:flex-row gap-2"
+                style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${Math.min(Math.max(keyboardInset, 0), 260)}px)` }}
+              >
                 <input
                   value={draft}
                   maxLength={500}
                   onChange={(event) => setDraft(event.target.value)}
-                  placeholder="메시지를 입력해 주세요 (최대 500자)"
+                  placeholder={
+                    canPostMessage
+                      ? '메시지를 입력해 주세요 (최대 500자)'
+                      : 'viewer 권한은 읽기 전용입니다.'
+                  }
+                  disabled={!canPostMessage}
                   className="flex-1 rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm"
                 />
                 <button
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !canPostMessage}
                   type="submit"
                   className="px-4 py-2 rounded-xl border border-sentinel-green/50 text-sentinel-green font-bold text-sm disabled:opacity-50"
                 >
-                  {isSubmitting ? '전송 중' : '전송'}
+                  {!canPostMessage ? '읽기 전용' : isSubmitting ? '전송 중' : '전송'}
                 </button>
               </form>
+              {!canPostMessage && (
+                <p className="mt-2 text-[11px] text-gray-500">
+                  뷰어 권한은 프로젝트 내용을 조회만 할 수 있습니다.
+                </p>
+              )}
             </section>
 
-            <section className="rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-4 md:p-5 min-h-[68vh] sm:min-h-[72vh] flex flex-col">
+            <section className="rounded-3xl border border-sentinel-green/20 bg-black/10 dark:bg-sentinel-dark-card p-4 md:p-5 min-h-[56vh] sm:min-h-[64vh] lg:min-h-[68vh] flex flex-col">
               <h2 className="text-sm font-bold text-sentinel-green mb-3">멤버 / 프로젝트 로그</h2>
 
               <div className="rounded-xl border border-sentinel-green/10 bg-black/25 p-3 mb-3">

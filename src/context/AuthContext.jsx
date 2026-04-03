@@ -26,6 +26,8 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isLoginPending, setIsLoginPending] = useState(false);
+  const [authError, setAuthError] = useState('');
   const [showNicknameModal, setShowNicknameModal] = useState(false);
   const [isAdminClaim, setIsAdminClaim] = useState(false);
 
@@ -38,6 +40,7 @@ export const AuthProvider = ({ children }) => {
         setProfile(null);
         setShowNicknameModal(false);
         setIsAdminClaim(false);
+        setIsLoginPending(false);
         setLoading(false);
         return;
       }
@@ -105,10 +108,25 @@ export const AuthProvider = ({ children }) => {
   }, [user]);
 
   const loginWithGoogle = async () => {
+    setAuthError('');
+    setIsLoginPending(true);
     try {
+      // 운영에서는 계정 선택을 강제해 계정 혼선을 줄인다.
+      googleProvider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
       console.error('Login error:', error);
+      if (error?.code === 'auth/popup-closed-by-user') {
+        setAuthError('로그인 창이 닫혀 인증이 취소되었습니다.');
+      } else if (error?.code === 'auth/popup-blocked') {
+        setAuthError('브라우저 팝업이 차단되었습니다. 팝업 허용 후 다시 시도해 주세요.');
+      } else if (error?.code === 'auth/cancelled-popup-request') {
+        setAuthError('이전 로그인 요청이 취소되었습니다. 다시 시도해 주세요.');
+      } else {
+        setAuthError('Google 로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+      }
+    } finally {
+      setIsLoginPending(false);
     }
   };
 
@@ -190,6 +208,8 @@ export const AuthProvider = ({ children }) => {
       user,
       profile,
       loading,
+      isLoginPending,
+      authError,
       loginWithGoogle,
       logout,
       updateNickname,
@@ -197,7 +217,7 @@ export const AuthProvider = ({ children }) => {
       setShowNicknameModal,
       isAdmin: isAdminClaim
     }),
-    [user, profile, loading, showNicknameModal, isAdminClaim]
+    [user, profile, loading, isLoginPending, authError, showNicknameModal, isAdminClaim]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

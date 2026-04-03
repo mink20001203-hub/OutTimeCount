@@ -162,7 +162,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.projectId is string
-        && canAccessProject(request.resource.data.projectId)
+        && canEditProjectContent(request.resource.data.projectId)
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
         && request.resource.data.title.size() <= 120;
@@ -180,7 +180,7 @@ service cloud.firestore {
         && request.resource.data.authorUid == request.auth.uid
         && request.resource.data.projectId is string
         && request.resource.data.projectId == get(/databases/$(database)/documents/project_threads/$(threadId)).data.projectId
-        && canAccessProject(request.resource.data.projectId)
+        && canEditProjectContent(request.resource.data.projectId)
         && request.resource.data.authorNickname is string
         && request.resource.data.authorNickname.size() > 0
         && request.resource.data.authorNickname.size() <= 24

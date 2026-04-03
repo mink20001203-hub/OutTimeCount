@@ -12,94 +12,18 @@ import AdminTerminal from './context/AdminTerminal';
 
 // 서버 검증 엔드포인트: 로컬/배포 환경에서 .env로 주입
 const PAYMENT_VERIFY_URL = import.meta.env.VITE_PAYMENT_VERIFY_URL || '';
+// MODULE_04 최종 고정값 1안(안정형)
+const FINAL_CHAT_HEIGHT = {
+  desktop: { topOffset: 28, capSubtract: 124, capFloor: 600, minRatio: 0.64, minFloor: 520, minCeil: 600 },
+  tablet: { minHeight: 470, maxRatio: 0.64, maxFloor: 500 },
+  mobile: { minHeight: 410, maxRatio: 0.6, maxFloor: 430 },
+  compact: { minHeight: 350, maxRatio: 0.56, maxFloor: 360 }
+};
 
 const DEMO_PATRONS = [
   { id: 'demo_patron_admin', nickname: 'Admin', amount: 500000, to: 'UNICEF', badge: 'FOUNDING' },
   { id: 'demo_patron_fan', nickname: 'AhnYujinFan', amount: 300000, to: 'WWF', badge: 'VIP' },
   { id: 'demo_patron_operator', nickname: 'NightShiftObserver', amount: 150000, to: 'DOCTORS', badge: 'CORE' },
-];
-
-// 1차 레이아웃 개편용 샘플 데이터. 이후 Firestore 컬렉션으로 치환한다.
-const SAMPLE_PROJECTS = [
-  {
-    id: 'project_lounge_dashboard',
-    title: 'Realtime Lounge Dashboard',
-    status: '진행 중',
-    tags: ['REACT', 'FIREBASE'],
-    todayLog: '프로젝트 단위 채팅과 몰입 랭킹 UI를 스캐폴딩했습니다.',
-    retro: '채팅은 기록성, 랭킹은 몰입 리듬 중심으로 재정의합니다.',
-    demoUrl: 'https://example.com/demo/lounge',
-    repoUrl: 'https://github.com/example/lounge'
-  },
-  {
-    id: 'project_prompt_suite',
-    title: 'AI Prompt Engineering Suite',
-    status: '진행 중',
-    tags: ['NODE', 'OPENAI'],
-    todayLog: '지식 공유용 참고 링크 메시지 타입을 설계했습니다.',
-    retro: '질문-피드백-참고자료 구조로 회고 검색성을 높일 예정입니다.',
-    demoUrl: 'https://example.com/demo/prompt',
-    repoUrl: 'https://github.com/example/prompt-suite'
-  },
-  {
-    id: 'project_focus_tracker',
-    title: 'Focus Session Tracker',
-    status: '검증 중',
-    tags: ['ANALYTICS', 'TIMER'],
-    todayLog: '오늘 몰입 시간과 연속 작업일 계산 규칙을 점검했습니다.',
-    retro: '경쟁보다 지속성을 강조하는 랭킹 메시지로 교체합니다.',
-    demoUrl: 'https://example.com/demo/focus',
-    repoUrl: 'https://github.com/example/focus-tracker'
-  }
-];
-
-const SAMPLE_THREAD_MESSAGES = [
-  {
-    id: 'msg_1',
-    projectId: 'project_lounge_dashboard',
-    author: '하용',
-    type: '질문',
-    text: '프로젝트 보드 카드에서 로그와 회고를 동시에 보여주면 가독성이 어떨까요?',
-    time: '14:02'
-  },
-  {
-    id: 'msg_2',
-    projectId: 'project_lounge_dashboard',
-    author: '민권',
-    type: '피드백',
-    text: '회고는 접기/펼치기로 두면 카드 높이 흔들림을 줄일 수 있습니다.',
-    time: '14:05'
-  },
-  {
-    id: 'msg_3',
-    projectId: 'project_lounge_dashboard',
-    author: 'Alex_Dev',
-    type: '참고자료',
-    text: 'https://firebase.google.com/docs/firestore/security/get-started',
-    time: '14:08'
-  },
-  {
-    id: 'msg_4',
-    projectId: 'project_prompt_suite',
-    author: '하용',
-    type: '질문',
-    text: '프롬프트 버전 관리는 태그 기반이 좋을까요?',
-    time: '14:12'
-  },
-  {
-    id: 'msg_5',
-    projectId: 'project_focus_tracker',
-    author: '민권',
-    type: '일반',
-    text: '오늘은 연속 4일차를 목표로 진행합니다.',
-    time: '14:16'
-  }
-];
-
-const SAMPLE_FOCUS_RANKING = [
-  { id: 'rank_1', nickname: '하용', todayFocus: '08:42:12', streakDays: 12 },
-  { id: 'rank_2', nickname: 'CodeNinja', todayFocus: '07:55:30', streakDays: 8 },
-  { id: 'rank_3', nickname: '민권', todayFocus: '05:12:44', streakDays: 4 },
 ];
 
 /**
@@ -1485,7 +1409,12 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
   });
 
   useEffect(() => {
-    if (!projects.length) return;
+    if (!projects.length) {
+      setEditProjectId('');
+      setEditForm({ title: '', description: '', status: '진행 중', tags: '', demoUrl: '', repoUrl: '' });
+      setLogForm((prev) => ({ ...prev, projectId: '' }));
+      return;
+    }
     if (!editProjectId) {
       setEditProjectId(projects[0].id);
       setLogForm((prev) => ({ ...prev, projectId: projects[0].id }));
@@ -1656,6 +1585,7 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
 
         <form onSubmit={handleUpdateProject} className="rounded-2xl border border-sentinel-green/15 bg-black/20 p-4 space-y-2">
           <p className="text-sm font-bold text-sentinel-green">프로젝트 수정</p>
+          {!projects.length && <p className="text-xs text-gray-500">수정할 프로젝트가 없습니다. 먼저 프로젝트를 생성해 주세요.</p>}
           <select value={editProjectId} onChange={(event) => setEditProjectId(event.target.value)} className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm">
             {projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
           </select>
@@ -1667,6 +1597,7 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
 
         <form onSubmit={handleCreateLog} className="rounded-2xl border border-sentinel-green/15 bg-black/20 p-4 space-y-2">
           <p className="text-sm font-bold text-sentinel-green">오늘 작업 로그</p>
+          {!projects.length && <p className="text-xs text-gray-500">로그를 작성할 프로젝트가 없습니다. 프로젝트를 먼저 만들어 주세요.</p>}
           <select value={logForm.projectId} onChange={(event) => setLogForm((prev) => ({ ...prev, projectId: event.target.value }))} className="w-full rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm">
             {projects.map((project) => <option key={`${project.id}_log`} value={project.id}>{project.title}</option>)}
           </select>
@@ -1765,6 +1696,11 @@ const ProjectBoardPanel = ({ projects }) => {
         </div>
       </div>
       <div className="space-y-4">
+        {!projects.length && (
+          <div className="rounded-2xl border border-sentinel-green/10 bg-black/20 p-4 text-sm text-gray-500">
+            등록된 프로젝트가 없습니다. 상단 입력형 라운지 폼에서 첫 프로젝트를 생성해 주세요.
+          </div>
+        )}
         {filteredByTagProjects.map((project) => (
           <article key={project.id} className="rounded-2xl border border-sentinel-green/15 bg-black/15 dark:bg-black/25 p-4">
             <div className="flex items-start justify-between gap-3">
@@ -1804,7 +1740,7 @@ const ProjectBoardPanel = ({ projects }) => {
   );
 };
 
-const ProjectChatPanel = ({ projects, messages, onSendMessage, searchState, onSearchStateChange }) => {
+const ProjectChatPanel = ({ projects, messages, onSendMessage, searchState, onSearchStateChange, keyboardInset = 0 }) => {
   const [activeProjectId, setActiveProjectId] = useState(projects[0]?.id || '');
   const [draft, setDraft] = useState('');
   const [messageType, setMessageType] = useState('GENERAL');
@@ -1825,6 +1761,7 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage, searchState, onSe
   }, [projects, activeProjectId]);
 
   useEffect(() => {
+    if (!projects.length) return;
     const nextKeyword = (searchKeyword || '').trim();
     const nextLimit = Number(recentLimit) || 150;
     if (!onSearchStateChange) return;
@@ -1888,6 +1825,11 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage, searchState, onSe
         <span className="text-xs text-sentinel-green/70 font-bold">기록형 협업</span>
       </div>
       <div className="grid grid-cols-1 gap-2 mb-3 max-h-40 overflow-y-auto pr-1">
+        {!projects.length && (
+          <div className="rounded-xl border border-sentinel-green/20 bg-black/20 p-3 text-xs text-gray-500">
+            채팅 대상 프로젝트가 없습니다.
+          </div>
+        )}
         {projects.map((project) => (
           <button
             key={project.id}
@@ -1951,7 +1893,11 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage, searchState, onSe
           </div>
         )}
       </div>
-      <div className="mt-3 pt-3 border-t border-sentinel-green/15">
+      <div
+        className="mt-3 pt-3 border-t border-sentinel-green/15"
+        // 모바일 가상 키보드 노출 시 입력 폼이 가려지지 않도록 하단 여백을 동적으로 확보한다.
+        style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${Math.min(Math.max(keyboardInset, 0), 260)}px)` }}
+      >
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
           <select
             value={messageType}
@@ -1967,11 +1913,12 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage, searchState, onSe
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="질문, 피드백, 참고자료 링크를 입력하세요."
+            disabled={!projects.length}
             className="flex-1 rounded-xl border border-sentinel-green/30 bg-black/20 px-3 py-2 text-sm text-black dark:text-white"
           />
           <button
             type="submit"
-            disabled={isSending}
+            disabled={isSending || !projects.length}
             className="px-3 py-2 rounded-xl border border-sentinel-green/50 text-sentinel-green text-sm font-bold disabled:opacity-50 sm:w-auto"
           >
             {isSending ? '전송 중' : '등록'}
@@ -2012,6 +1959,11 @@ const FocusRankingPanel = ({ ranking }) => {
         <span className="text-xs text-sentinel-green/70 font-bold">성과 비교가 아닌 리듬 지표</span>
       </div>
       <div className="space-y-3">
+        {!ranking.length && (
+          <div className="rounded-2xl border border-sentinel-green/10 bg-black/20 px-4 py-3 text-sm text-gray-500">
+            아직 저장된 몰입 세션 데이터가 없습니다.
+          </div>
+        )}
         {ranking.map((row, index) => (
           <div key={row.id} className="rounded-2xl border border-sentinel-green/10 bg-black/20 px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -2061,7 +2013,7 @@ const DevLoungePulseLogo = ({ compact = false }) => {
 
 function App() {
   const { isActive, isTerminated, formatTime, survivalTime, resumeHere, bonusPulse } = useTimer();
-  const { user, profile, showNicknameModal, isAdmin, loginWithGoogle } = useAuth();
+  const { user, profile, loading, authError, isLoginPending, showNicknameModal, isAdmin, loginWithGoogle } = useAuth();
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isDonationOpen, setIsDonationOpen] = useState(false);
@@ -2083,6 +2035,7 @@ function App() {
   const [loungeDataReady, setLoungeDataReady] = useState(false);
   const [viewportHeight, setViewportHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 900);
   const [viewportWidth, setViewportWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1440);
+  const [visualViewportHeight, setVisualViewportHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 900);
   const [chatQueryState, setChatQueryState] = useState({
     projectId: '',
     keyword: '',
@@ -2240,6 +2193,21 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // visualViewport는 모바일 키보드로 실제 보이는 영역이 줄어드는 경우를 감지한다.
+    const viewport = window.visualViewport;
+    if (!viewport) {
+      setVisualViewportHeight(window.innerHeight);
+      return;
+    }
+    const syncVisualViewport = () => {
+      setVisualViewportHeight(Math.floor(viewport.height));
+    };
+    syncVisualViewport();
+    viewport.addEventListener('resize', syncVisualViewport);
+    return () => viewport.removeEventListener('resize', syncVisualViewport);
+  }, []);
+
+  useEffect(() => {
     if (!user) {
       setProjects([]);
       setProjectLogs([]);
@@ -2354,7 +2322,7 @@ function App() {
     };
   }, [user, projectThreads, chatQueryState.type, chatQueryState.keyword, chatQueryState.recentLimit]);
 
-  const projectList = projects.length ? projects : SAMPLE_PROJECTS;
+  const projectList = projects;
   const threadToProjectMap = new Map(projectThreads.map((thread) => [thread.id, thread.projectId]));
   const mappedMessages = threadMessages
     .map((message) => ({
@@ -2369,10 +2337,15 @@ function App() {
     }))
     .filter((message) => Boolean(message.projectId))
     .reverse();
-  const chatMessages = mappedMessages.length ? mappedMessages : SAMPLE_THREAD_MESSAGES;
+  const chatMessages = mappedMessages;
 
   useEffect(() => {
-    if (!projectList.length) return;
+    if (!projectList.length) {
+      if (chatQueryState.projectId) {
+        setChatQueryState((prev) => ({ ...prev, projectId: '' }));
+      }
+      return;
+    }
     if (chatQueryState.projectId) return;
     setChatQueryState((prev) => ({ ...prev, projectId: projectList[0].id }));
   }, [projectList, chatQueryState.projectId]);
@@ -2445,7 +2418,7 @@ function App() {
       todayFocus: row.todayFocus,
       streakDays: row.streakDays
     }));
-  const focusRanking = rankingFromFirestore.length ? rankingFromFirestore : SAMPLE_FOCUS_RANKING;
+  const focusRanking = rankingFromFirestore;
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -2454,7 +2427,7 @@ function App() {
     return entry.createdAt.toMillis() >= todayStart.getTime();
   }).length;
   const projectCount = projectCards.length;
-  const todayLogCount = todayLogCountFromFirestore || SAMPLE_PROJECTS.length * 2;
+  const todayLogCount = todayLogCountFromFirestore;
   const focusTimeText = formatTime(survivalTime);
   const recentLogsForEditor = (projectLogs.length ? projectLogs : [])
     .slice(0, 20)
@@ -2481,12 +2454,6 @@ function App() {
     return role === 'admin' || role === 'owner' || role === 'editor';
   };
 
-  const canAccessProject = (project) => {
-    if (!user || !project) return false;
-    if (!project.ownerUid) return true;
-    return Boolean(getProjectRole(project));
-  };
-
   const canManageLog = (log) => {
     if (!user || !log) return false;
     if (isAdmin) return true;
@@ -2496,7 +2463,7 @@ function App() {
   const handleSendProjectMessage = async ({ projectId, text, messageType }) => {
     if (!user || !projectId) return;
     const targetProject = projectCards.find((project) => project.id === projectId);
-    if (!canAccessProject(targetProject)) throw new Error('프로젝트 채팅 권한이 없습니다.');
+    if (!canManageProject(targetProject)) throw new Error('프로젝트 채팅 작성 권한이 없습니다.');
     const normalizedText = text.trim();
     if (!normalizedText) return;
 
@@ -2677,6 +2644,51 @@ function App() {
     }
   }, [user, profile?.nickname, isActive, isTerminated]);
 
+  // 화면 폭별로 MODULE_04 높이를 다르게 고정해 채팅 패널이 과도하게 늘어나는 현상을 막는다.
+  const getModule04ContainerStyle = () => {
+    const profile = FINAL_CHAT_HEIGHT;
+    const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
+    const effectiveViewportHeight = Math.max(420, Math.min(viewportHeight, visualViewportHeight || viewportHeight));
+    if (viewportWidth >= 1024) {
+      const desktopCap = Math.max(profile.desktop.capFloor, effectiveViewportHeight - profile.desktop.capSubtract);
+      const desktopMin = clamp(
+        Math.floor(effectiveViewportHeight * profile.desktop.minRatio),
+        profile.desktop.minFloor,
+        Math.min(profile.desktop.minCeil, desktopCap)
+      );
+      if (module04Height) {
+        return {
+          height: `${Math.min(module04Height, desktopCap)}px`,
+          minHeight: `${desktopMin}px`,
+          maxHeight: `calc(100vh - ${profile.desktop.topOffset}px)`
+        };
+      }
+      return {
+        minHeight: `${desktopMin}px`,
+        maxHeight: `calc(100vh - ${profile.desktop.topOffset}px)`
+      };
+    }
+
+    if (viewportWidth >= 768) {
+      return {
+        minHeight: `${profile.tablet.minHeight}px`,
+        maxHeight: `${Math.max(profile.tablet.maxFloor, Math.floor(effectiveViewportHeight * profile.tablet.maxRatio))}px`
+      };
+    }
+
+    if (viewportWidth >= 480) {
+      return {
+        minHeight: `${profile.mobile.minHeight}px`,
+        maxHeight: `${Math.max(profile.mobile.maxFloor, Math.floor(effectiveViewportHeight * profile.mobile.maxRatio))}px`
+      };
+    }
+
+    return {
+      minHeight: `${profile.compact.minHeight}px`,
+      maxHeight: `${Math.max(profile.compact.maxFloor, Math.floor(effectiveViewportHeight * profile.compact.maxRatio))}px`
+    };
+  };
+
   return (
     <div className="min-h-screen bg-white dark:bg-sentinel-dark-bg text-black dark:text-white selection:bg-sentinel-green selection:text-black antialiased transition-colors duration-500 font-sans text-left overflow-x-hidden shadow-sm">
       <WelcomeSplash user={user} visible={showSplash} />
@@ -2767,7 +2779,7 @@ function App() {
               몰입 시간 랭킹으로 서로의 작업 리듬을 자극합니다.
             </p>
             <p className="mt-2 text-xs text-gray-500">
-              데이터 소스: {loungeDataReady && projects.length > 0 ? '실시간 Firestore' : '샘플 스캐폴딩'}
+              데이터 소스: {loungeDataReady ? '실시간 Firestore' : '동기화 준비 중'}
             </p>
           </section>
 
@@ -2794,18 +2806,7 @@ function App() {
             </div>
             <div
               className="order-1 lg:order-2 lg:col-span-4 min-h-0"
-              style={
-                module04Height
-                  ? {
-                      height: `${Math.min(module04Height, Math.floor(viewportHeight * 1.35))}px`,
-                      minHeight: viewportWidth >= 1024 ? `${Math.floor(viewportHeight * 0.82)}px` : '520px',
-                      maxHeight: `calc(100vh - 28px)`
-                    }
-                  : {
-                      minHeight: viewportWidth >= 1024 ? '560px' : '520px',
-                      maxHeight: `calc(100vh - 28px)`
-                    }
-              }
+              style={getModule04ContainerStyle()}
             >
               <ProjectChatPanel
                 projects={projectCards}
@@ -2813,6 +2814,7 @@ function App() {
                 onSendMessage={handleSendProjectMessage}
                 searchState={chatQueryState}
                 onSearchStateChange={setChatQueryState}
+                keyboardInset={Math.max(0, viewportHeight - visualViewportHeight)}
               />
             </div>
           </div>
@@ -2827,11 +2829,15 @@ function App() {
             <h2 className="text-4xl font-mono font-black mb-4 uppercase italic tracking-tighter text-black dark:text-white italic tracking-tight font-headline shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm text-center shadow-sm">DEVLOUNGE PULSE</h2>
             <p className="text-gray-500 dark:text-gray-400 font-sans text-base uppercase tracking-[0.3em] mb-12 leading-relaxed italic font-black opacity-80 text-center">접근 권한이 필요합니다<br/>보안 프로토콜을 초기화하세요</p>
             <button
+              disabled={loading || isLoginPending}
               className="w-full py-5 bg-black dark:bg-sentinel-green dark:text-black hover:bg-sentinel-green dark:hover:bg-sentinel-green/80 text-white hover:text-black font-mono font-black text-sm rounded-[24px] transition-all duration-500 uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.1)] hover:shadow-sentinel-green/30 active:scale-95 font-headline shadow-lg shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-xl shadow-sm shadow-sm text-center shadow-xl shadow-xl shadow-xl"
               onClick={loginWithGoogle}
             >
-              Google로 접속
+              {loading || isLoginPending ? '접속 처리 중' : 'Google로 접속'}
             </button>
+            {authError && (
+              <p className="mt-4 text-xs text-red-400">{authError}</p>
+            )}
             <p className="mt-10 font-mono text-[9px] text-gray-300 dark:text-gray-600 uppercase tracking-[0.5em] font-black opacity-40 italic font-sans text-center text-center text-center text-center text-center text-center text-center text-center text-center font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic font-medium opacity-40 italic shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm shadow-sm">DEVLOUNGE_PULSE_V1.0</p>
           </div>
         </div>
