@@ -2463,13 +2463,28 @@ function App() {
       projectTitle: projectList.find((project) => project.id === log.projectId)?.title || '프로젝트'
     }));
 
+  // 프로젝트 권한은 owner/admin/editor만 수정 가능으로 통일한다.
+  const getProjectRole = (project) => {
+    if (!user || !project) return null;
+    if (isAdmin) return 'admin';
+    if (project.ownerUid === user.uid) return 'owner';
+    if (project.memberRoles && project.memberRoles[user.uid]) return project.memberRoles[user.uid];
+    // 기존 members 배열만 있는 문서와의 호환을 위해 editor로 간주한다.
+    if (Array.isArray(project.members) && project.members.includes(user.uid)) return 'editor';
+    return null;
+  };
+
   const canManageProject = (project) => {
     if (!user || !project) return false;
     if (!project.ownerUid) return true;
-    if (isAdmin) return true;
-    const isOwner = project.ownerUid === user.uid;
-    const isMember = Array.isArray(project.members) && project.members.includes(user.uid);
-    return isOwner || isMember;
+    const role = getProjectRole(project);
+    return role === 'admin' || role === 'owner' || role === 'editor';
+  };
+
+  const canAccessProject = (project) => {
+    if (!user || !project) return false;
+    if (!project.ownerUid) return true;
+    return Boolean(getProjectRole(project));
   };
 
   const canManageLog = (log) => {
@@ -2481,7 +2496,7 @@ function App() {
   const handleSendProjectMessage = async ({ projectId, text, messageType }) => {
     if (!user || !projectId) return;
     const targetProject = projectCards.find((project) => project.id === projectId);
-    if (!canManageProject(targetProject)) throw new Error('프로젝트 채팅 권한이 없습니다.');
+    if (!canAccessProject(targetProject)) throw new Error('프로젝트 채팅 권한이 없습니다.');
     const normalizedText = text.trim();
     if (!normalizedText) return;
 
@@ -2539,6 +2554,9 @@ function App() {
       repoUrl: (payload.repoUrl || '').trim(),
       ownerUid: user.uid,
       members: [user.uid],
+      memberRoles: {
+        [user.uid]: 'owner'
+      },
       updatedAt: serverTimestamp()
     });
   };

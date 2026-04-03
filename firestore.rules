@@ -32,14 +32,40 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/projects/$(projectId));
     }
 
+    function projectRole(projectId) {
+      return projectDoc(projectId).data.ownerUid == request.auth.uid
+        ? "owner"
+        : (
+          projectDoc(projectId).data.memberRoles is map
+          && projectDoc(projectId).data.memberRoles[request.auth.uid] is string
+            ? projectDoc(projectId).data.memberRoles[request.auth.uid]
+            : (
+              projectDoc(projectId).data.members is list
+              && request.auth.uid in projectDoc(projectId).data.members
+                ? "editor"
+                : ""
+            )
+        );
+    }
+
     function canAccessProject(projectId) {
       return isSignedIn()
         && projectExists(projectId)
         && (
           isAdmin()
-          || projectDoc(projectId).data.ownerUid == request.auth.uid
-          || (projectDoc(projectId).data.members is list
-              && request.auth.uid in projectDoc(projectId).data.members)
+          || projectRole(projectId) == "owner"
+          || projectRole(projectId) == "editor"
+          || projectRole(projectId) == "viewer"
+        );
+    }
+
+    function canEditProjectContent(projectId) {
+      return isSignedIn()
+        && projectExists(projectId)
+        && (
+          isAdmin()
+          || projectRole(projectId) == "owner"
+          || projectRole(projectId) == "editor"
         );
     }
 
@@ -71,15 +97,25 @@ service cloud.firestore {
         && request.resource.data.title.size() <= 120
         && request.resource.data.status is string
         && request.resource.data.members is list
-        && request.auth.uid in request.resource.data.members;
+        && request.auth.uid in request.resource.data.members
+        && request.resource.data.memberRoles is map
+        && request.resource.data.memberRoles[request.auth.uid] == "owner";
 
-      // 프로젝트 메타/멤버 관리는 오너(또는 관리자)만 가능하도록 제한한다.
+      // 프로젝트 메타/멤버 관리는 owner 또는 admin만 허용한다.
       allow update: if isAdmin() || (
           isSignedIn()
           && resource.data.ownerUid == request.auth.uid
           && request.resource.data.ownerUid == resource.data.ownerUid
           && request.resource.data.members is list
           && request.auth.uid in request.resource.data.members
+          && (
+            (request.resource.data.memberRoles is map
+              && request.resource.data.memberRoles[resource.data.ownerUid] == "owner")
+            || (
+              !(resource.data.memberRoles is map)
+              && !(request.resource.data.memberRoles is map)
+            )
+          )
         );
 
       allow delete: if isAdmin() || (
@@ -93,7 +129,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.authorUid == request.auth.uid
         && request.resource.data.projectId is string
-        && canAccessProject(request.resource.data.projectId)
+        && canEditProjectContent(request.resource.data.projectId)
         && request.resource.data.summary is string
         && request.resource.data.summary.size() > 0
         && request.resource.data.summary.size() <= 800
@@ -101,7 +137,10 @@ service cloud.firestore {
 
       allow update: if isAdmin() || (
           isSignedIn()
-          && resource.data.authorUid == request.auth.uid
+          && (
+            resource.data.authorUid == request.auth.uid
+            || canEditProjectContent(resource.data.projectId)
+          )
           && request.resource.data.authorUid == resource.data.authorUid
           && request.resource.data.projectId == resource.data.projectId
           && canAccessProject(resource.data.projectId)
@@ -109,7 +148,10 @@ service cloud.firestore {
 
       allow delete: if isAdmin() || (
           isSignedIn()
-          && resource.data.authorUid == request.auth.uid
+          && (
+            resource.data.authorUid == request.auth.uid
+            || canEditProjectContent(resource.data.projectId)
+          )
           && canAccessProject(resource.data.projectId)
         );
     }
@@ -151,7 +193,13 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time;
 
       allow update, delete: if isAdmin() || (
-          isSignedIn() && resource.data.authorUid == request.auth.uid
+          isSignedIn()
+          && resource.data.authorUid == request.auth.uid
+          && request.resource.data.projectId == resource.data.projectId
+          && request.resource.data.authorUid == resource.data.authorUid
+          && request.resource.data.authorNickname == resource.data.authorNickname
+          && request.resource.data.messageType == resource.data.messageType
+          && request.resource.data.createdAt == resource.data.createdAt
         );
     }
 
