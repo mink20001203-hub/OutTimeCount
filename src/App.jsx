@@ -4,7 +4,7 @@ import { useTimer } from './context/TimerContext';
 import { useAuth } from './context/AuthContext';
 import { db } from './firebase';
 import { 
-  collection, query, orderBy, limit, onSnapshot, collectionGroup,
+  collection, query, orderBy, limit, onSnapshot,
   addDoc, serverTimestamp, where, getDocs, updateDoc, deleteDoc, doc
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -1680,6 +1680,7 @@ const ProjectInputPanel = ({ projects, logs, onCreateProject, onUpdateProject, o
 };
 
 const ProjectBoardPanel = ({ projects }) => {
+  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState('전체');
   const [tagFilter, setTagFilter] = useState('전체');
   const statusOptions = ['전체', ...Array.from(new Set(projects.map((project) => project.status || '미분류')))];
@@ -1737,6 +1738,9 @@ const ProjectBoardPanel = ({ projects }) => {
             <div className="mt-4 flex gap-3 text-xs">
               <a href={project.demoUrl} target="_blank" rel="noreferrer" className="text-sentinel-green hover:underline">Demo</a>
               <a href={project.repoUrl} target="_blank" rel="noreferrer" className="text-sentinel-green hover:underline">Repo</a>
+              <button type="button" onClick={() => navigate(`/project/${project.id}`)} className="text-sentinel-green hover:underline">
+                스레드 화면
+              </button>
             </div>
           </article>
         ))}
@@ -1833,7 +1837,7 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage, searchState, onSe
         <h3 className="module-header-text text-sentinel-green">Module_04: 프로젝트_채팅</h3>
         <span className="text-xs text-sentinel-green/70 font-bold">기록형 협업</span>
       </div>
-      <div className="grid grid-cols-1 gap-2 mb-3">
+      <div className="grid grid-cols-1 gap-2 mb-3 max-h-40 overflow-y-auto pr-1">
         {projects.map((project) => (
           <button
             key={project.id}
@@ -1849,7 +1853,7 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage, searchState, onSe
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-3 gap-2 mb-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
         <select
           value={typeFilter}
           onChange={(event) => setTypeFilter(event.target.value)}
@@ -1898,7 +1902,7 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage, searchState, onSe
         )}
       </div>
       <div className="mt-3 pt-3 border-t border-sentinel-green/15">
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
           <select
             value={messageType}
             onChange={(event) => setMessageType(event.target.value)}
@@ -1918,7 +1922,7 @@ const ProjectChatPanel = ({ projects, messages, onSendMessage, searchState, onSe
           <button
             type="submit"
             disabled={isSending}
-            className="px-3 py-2 rounded-xl border border-sentinel-green/50 text-sentinel-green text-sm font-bold disabled:opacity-50"
+            className="px-3 py-2 rounded-xl border border-sentinel-green/50 text-sentinel-green text-sm font-bold disabled:opacity-50 sm:w-auto"
           >
             {isSending ? '전송 중' : '등록'}
           </button>
@@ -1999,6 +2003,7 @@ function App() {
   const [threadMessages, setThreadMessages] = useState([]);
   const [focusSessions, setFocusSessions] = useState([]);
   const [loungeDataReady, setLoungeDataReady] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 900);
   const [chatQueryState, setChatQueryState] = useState({
     projectId: '',
     keyword: '',
@@ -2145,6 +2150,13 @@ function App() {
   }, [user, showNicknameModal]);
 
   useEffect(() => {
+    const syncViewport = () => setViewportHeight(window.innerHeight);
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
+    return () => window.removeEventListener('resize', syncViewport);
+  }, []);
+
+  useEffect(() => {
     if (!user) {
       setProjects([]);
       setProjectLogs([]);
@@ -2178,58 +2190,16 @@ function App() {
       setProjectLogs(next);
     }));
 
-    const threadsQuery = query(collection(db, 'project_threads'), orderBy('lastMessageAt', 'desc'), limit(50));
+    const threadsQuery = query(
+      collection(db, 'project_threads'),
+      where('projectId', '==', chatQueryState.projectId || 'NONE'),
+      orderBy('lastMessageAt', 'desc'),
+      limit(20)
+    );
     unsubscribers.push(onSnapshot(threadsQuery, (snapshot) => {
       const next = snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
       setProjectThreads(next);
     }));
-
-    // 최근 N개 + 타입 + 키워드 토큰(가능할 때) 기준으로 서버 쿼리를 최소화한다.
-    const messageConstraints = [];
-    if (chatQueryState.projectId) {
-      messageConstraints.push(where('projectId', '==', chatQueryState.projectId));
-    }
-    if (chatQueryState.type && chatQueryState.type !== 'ALL') {
-      messageConstraints.push(where('messageType', '==', chatQueryState.type));
-    }
-    const keywordToken = (chatQueryState.keyword || '').trim().toLowerCase();
-    if (keywordToken.length >= 2) {
-      messageConstraints.push(where('messageKeywords', 'array-contains', keywordToken));
-    }
-    messageConstraints.push(orderBy('createdAt', 'desc'));
-    messageConstraints.push(limit(chatQueryState.recentLimit || 150));
-
-    const primaryMessagesQuery = query(collectionGroup(db, 'messages'), ...messageConstraints);
-    const fallbackConstraints = [
-      ...(chatQueryState.projectId ? [where('projectId', '==', chatQueryState.projectId)] : []),
-      ...(chatQueryState.type && chatQueryState.type !== 'ALL' ? [where('messageType', '==', chatQueryState.type)] : []),
-      orderBy('createdAt', 'desc'),
-      limit(chatQueryState.recentLimit || 150)
-    ];
-    const fallbackMessagesQuery = query(collectionGroup(db, 'messages'), ...fallbackConstraints);
-
-    let fallbackUnsubscribe = null;
-    const primaryUnsubscribe = onSnapshot(primaryMessagesQuery, (snapshot) => {
-      const next = snapshot.docs.map((entry) => {
-        const threadId = entry.ref.parent.parent?.id || '';
-        return { id: entry.id, threadId, ...entry.data() };
-      });
-      setThreadMessages(next);
-    }, () => {
-      // 인덱스 미생성/제약 충돌 시 키워드 조건 없이 폴백한다.
-      if (fallbackUnsubscribe) return;
-      fallbackUnsubscribe = onSnapshot(fallbackMessagesQuery, (snapshot) => {
-        const next = snapshot.docs.map((entry) => {
-          const threadId = entry.ref.parent.parent?.id || '';
-          return { id: entry.id, threadId, ...entry.data() };
-        });
-        setThreadMessages(next);
-      });
-    });
-    unsubscribers.push(() => {
-      primaryUnsubscribe();
-      if (fallbackUnsubscribe) fallbackUnsubscribe();
-    });
 
     const focusQuery = query(
       collection(db, 'focus_sessions'),
@@ -2244,7 +2214,57 @@ function App() {
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [user, chatQueryState.projectId, chatQueryState.type, chatQueryState.keyword, chatQueryState.recentLimit]);
+  }, [user, chatQueryState.projectId]);
+
+  useEffect(() => {
+    if (!user) {
+      setThreadMessages([]);
+      return;
+    }
+
+    const activeThread = projectThreads[0];
+    if (!activeThread?.id) {
+      setThreadMessages([]);
+      return;
+    }
+
+    // 프로젝트별 스레드 하위 컬렉션을 직접 구독해 인덱스/쿼리 복잡도를 낮춘다.
+    const constraints = [];
+    if (chatQueryState.type && chatQueryState.type !== 'ALL') {
+      constraints.push(where('messageType', '==', chatQueryState.type));
+    }
+    const keywordToken = (chatQueryState.keyword || '').trim().toLowerCase();
+    if (keywordToken.length >= 2) {
+      constraints.push(where('messageKeywords', 'array-contains', keywordToken));
+    }
+    constraints.push(orderBy('createdAt', 'desc'));
+    constraints.push(limit(chatQueryState.recentLimit || 150));
+
+    const primaryQuery = query(collection(db, 'project_threads', activeThread.id, 'messages'), ...constraints);
+    const fallbackQuery = query(
+      collection(db, 'project_threads', activeThread.id, 'messages'),
+      ...(chatQueryState.type && chatQueryState.type !== 'ALL' ? [where('messageType', '==', chatQueryState.type)] : []),
+      orderBy('createdAt', 'desc'),
+      limit(chatQueryState.recentLimit || 150)
+    );
+
+    let fallbackUnsubscribe = null;
+    const primaryUnsubscribe = onSnapshot(primaryQuery, (snapshot) => {
+      const next = snapshot.docs.map((entry) => ({ id: entry.id, threadId: activeThread.id, ...entry.data() }));
+      setThreadMessages(next);
+    }, () => {
+      if (fallbackUnsubscribe) return;
+      fallbackUnsubscribe = onSnapshot(fallbackQuery, (snapshot) => {
+        const next = snapshot.docs.map((entry) => ({ id: entry.id, threadId: activeThread.id, ...entry.data() }));
+        setThreadMessages(next);
+      });
+    });
+
+    return () => {
+      primaryUnsubscribe();
+      if (fallbackUnsubscribe) fallbackUnsubscribe();
+    };
+  }, [user, projectThreads, chatQueryState.type, chatQueryState.keyword, chatQueryState.recentLimit]);
 
   const projectList = projects.length ? projects : SAMPLE_PROJECTS;
   const threadToProjectMap = new Map(projectThreads.map((thread) => [thread.id, thread.projectId]));
@@ -2327,8 +2347,25 @@ function App() {
       projectTitle: projectList.find((project) => project.id === log.projectId)?.title || '프로젝트'
     }));
 
+  const canManageProject = (project) => {
+    if (!user || !project) return false;
+    if (!project.ownerUid) return true;
+    if (isAdmin) return true;
+    const isOwner = project.ownerUid === user.uid;
+    const isMember = Array.isArray(project.members) && project.members.includes(user.uid);
+    return isOwner || isMember;
+  };
+
+  const canManageLog = (log) => {
+    if (!user || !log) return false;
+    if (isAdmin) return true;
+    return log.authorUid === user.uid;
+  };
+
   const handleSendProjectMessage = async ({ projectId, text, messageType }) => {
     if (!user || !projectId) return;
+    const targetProject = projectCards.find((project) => project.id === projectId);
+    if (!canManageProject(targetProject)) throw new Error('프로젝트 채팅 권한이 없습니다.');
     const normalizedText = text.trim();
     if (!normalizedText) return;
 
@@ -2392,6 +2429,8 @@ function App() {
 
   const handleUpdateProject = async (projectId, payload) => {
     if (!user || !projectId) throw new Error('수정할 프로젝트를 선택해 주세요.');
+    const targetProject = projectCards.find((project) => project.id === projectId);
+    if (!canManageProject(targetProject)) throw new Error('프로젝트 수정 권한이 없습니다.');
     const title = (payload.title || '').trim();
     if (!title) throw new Error('프로젝트 제목을 입력해 주세요.');
 
@@ -2416,6 +2455,8 @@ function App() {
     const projectId = payload.projectId;
     const summary = (payload.summary || '').trim();
     if (!projectId) throw new Error('로그 대상 프로젝트를 선택해 주세요.');
+    const targetProject = projectCards.find((project) => project.id === projectId);
+    if (!canManageProject(targetProject)) throw new Error('프로젝트 로그 작성 권한이 없습니다.');
     if (!summary) throw new Error('오늘 작업 내용을 입력해 주세요.');
 
     const links = (payload.links || '')
@@ -2441,6 +2482,8 @@ function App() {
 
   const handleUpdateProjectLog = async (logId, payload) => {
     if (!user || !logId) throw new Error('수정할 로그를 선택해 주세요.');
+    const targetLog = projectLogs.find((log) => log.id === logId);
+    if (!canManageLog(targetLog)) throw new Error('로그 수정 권한이 없습니다.');
     const summary = (payload.summary || '').trim();
     if (!summary) throw new Error('수정할 작업 내용을 입력해 주세요.');
 
@@ -2458,6 +2501,8 @@ function App() {
 
   const handleDeleteProjectLog = async (logId) => {
     if (!user || !logId) throw new Error('삭제할 로그를 선택해 주세요.');
+    const targetLog = projectLogs.find((log) => log.id === logId);
+    if (!canManageLog(targetLog)) throw new Error('로그 삭제 권한이 없습니다.');
     await deleteDoc(doc(db, 'project_logs', logId));
   };
 
@@ -2562,7 +2607,7 @@ function App() {
           />
 
           <div className="grid grid-cols-1 lg:grid-cols-12 items-stretch gap-4">
-            <div ref={leftModulesRef} className="lg:col-span-8 space-y-4">
+            <div ref={leftModulesRef} className="order-2 lg:order-1 lg:col-span-8 space-y-4">
               <ProjectInputPanel
                 projects={projectCards}
                 logs={recentLogsForEditor}
@@ -2577,11 +2622,18 @@ function App() {
               <FocusRankingPanel ranking={focusRanking} />
             </div>
             <div
-              className="lg:col-span-4 min-h-0"
+              className="order-1 lg:order-2 lg:col-span-4 min-h-0"
               style={
                 module04Height
-                  ? { height: `${module04Height}px`, maxHeight: 'calc(100vh - 120px)' }
-                  : { maxHeight: 'calc(100vh - 120px)' }
+                  ? {
+                      height: `${Math.min(module04Height, Math.floor(viewportHeight * 1.35))}px`,
+                      minHeight: `${Math.floor(viewportHeight * 0.82)}px`,
+                      maxHeight: `calc(100vh - 28px)`
+                    }
+                  : {
+                      minHeight: `560px`,
+                      maxHeight: `calc(100vh - 28px)`
+                    }
               }
             >
               <ProjectChatPanel

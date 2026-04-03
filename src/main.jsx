@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
 import GamePage from './pages/GamePage.jsx'
+import ProjectThreadPage from './pages/ProjectThreadPage.jsx'
 import { TimerProvider } from './context/TimerContext'
 import { AuthProvider } from './context/AuthContext'
 
@@ -15,6 +16,7 @@ createRoot(document.getElementById('root')).render(
           <Routes>
             <Route path="/" element={<App />} />
             <Route path="/game/:gameId" element={<GamePage />} />
+            <Route path="/project/:projectId" element={<ProjectThreadPage />} />
           </Routes>
         </TimerProvider>
       </AuthProvider>
